@@ -7,7 +7,7 @@
     <div class="card-body">
       <div class="card-top">
         <span class="channel-name">{{ incident.channelName }}</span>
-        <span v-if="incident.isVip" class="badge vip-badge">VIP</span>
+        <span v-if="incident.isVip" class="badge vip-badge">PRIORITIZED</span>
         <span class="badge state-badge" :class="`state-${incident.state.toLowerCase()}`">
           {{ incident.state.replace(/_/g, ' ') }}
         </span>

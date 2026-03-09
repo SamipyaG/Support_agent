@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Backend (ts-node)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "ts-node/register",
+        "--transpile-only",
+        "--env-file=.env"
+      ],
+      "args": ["src/index.ts"],
+      "cwd": "${workspaceFolder}/backend",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "envFile": "${workspaceFolder}/backend/.env",
+      "console": "integratedTerminal",
+      "restart": false
+    },
+    {
+      "name": "Attach to Nodemon (npm run dev)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "localRoot": "${workspaceFolder}/backend"
+    }
+  ]
+}

@@ -72,6 +72,8 @@ export interface EscalationLog {
 
 export const useIncidentsStore = defineStore('incidents', () => {
   const incidents = ref<Incident[]>([]);
+  const alarmHistory = ref<Incident[]>([]);
+  const trackedActiveIds = ref<Set<string>>(new Set());
   const selectedIncident = ref<IncidentDetail | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -79,11 +81,32 @@ export const useIncidentsStore = defineStore('incidents', () => {
   const currentPage = ref(1);
   const pendingApprovalId = ref<string | null>(null);
 
+  const TERMINAL_STATES = ['RESOLVED', 'CLOSED', 'FAILED'];
+
   const activeIncidents = computed(() =>
-    incidents.value.filter((i) => !['RESOLVED', 'CLOSED', 'FAILED'].includes(i.state)),
+    incidents.value.filter((i) => !TERMINAL_STATES.includes(i.state)),
   );
 
   const vipIncidents = computed(() => incidents.value.filter((i) => i.isVip));
+
+  /** Detect alarms that vanished from the active list and move them to history. */
+  function _syncHistory(newIncidents: Incident[]): void {
+    const newIds = new Set(newIncidents.map((i) => i._id));
+    const historyIds = new Set(alarmHistory.value.map((i) => i._id));
+
+    trackedActiveIds.value.forEach((id) => {
+      if (!newIds.has(id) && !historyIds.has(id)) {
+        // Was active last poll, no longer in response — move to history
+        const gone = incidents.value.find((i) => i._id === id);
+        if (gone) alarmHistory.value.unshift(gone);
+      }
+    });
+
+    // Update tracked set to current non-terminal incidents
+    trackedActiveIds.value = new Set(
+      newIncidents.filter((i) => !TERMINAL_STATES.includes(i.state)).map((i) => i._id),
+    );
+  }
 
   async function fetchIncidents(page = 1, state?: string): Promise<void> {
     loading.value = true;
@@ -92,7 +115,9 @@ export const useIncidentsStore = defineStore('incidents', () => {
       const params: Record<string, unknown> = { page, limit: 20 };
       if (state) params.state = state;
       const res = await api.get('/incidents', { params });
-      incidents.value = res.data.incidents;
+      const newList: Incident[] = res.data.incidents;
+      _syncHistory(newList);
+      incidents.value = newList;
       total.value = res.data.total;
       currentPage.value = page;
     } catch (err) {
@@ -157,6 +182,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
 
   return {
     incidents,
+    alarmHistory,
     selectedIncident,
     loading,
     error,

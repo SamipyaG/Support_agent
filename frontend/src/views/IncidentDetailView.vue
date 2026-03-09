@@ -42,13 +42,6 @@
               <span class="info-key">Stream</span><span class="info-val mono">{{ store.selectedIncident.streamType }}</span>
               <span class="info-key">Reported</span><span class="info-val">{{ store.selectedIncident.reportedBy }}</span>
               <span class="info-key">Error</span><span class="info-val mono error-code">{{ store.selectedIncident.errorCode || '—' }}</span>
-              <span class="info-key">Jira</span>
-              <span class="info-val">
-                <a v-if="store.selectedIncident.jiraTicketKey" :href="jiraUrl" target="_blank" class="jira-link">
-                  {{ store.selectedIncident.jiraTicketKey }}
-                </a>
-                <span v-else class="dim">—</span>
-              </span>
               <span class="info-key">Restarts</span>
               <span class="info-val mono" :class="{ 'warn': store.selectedIncident.restartAttempts > 0 }">
                 {{ store.selectedIncident.restartAttempts }} / {{ store.selectedIncident.maxRestartAttempts }}
@@ -64,25 +57,13 @@
             <div class="players-grid">
               <div class="player-embed">
                 <div class="player-embed-label source">Source</div>
-                <iframe
-                  v-if="sourceEmbedUrl"
-                  :src="sourceEmbedUrl"
-                  class="player-iframe"
-                  allowfullscreen
-                  allow="autoplay"
-                ></iframe>
+                <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
                 <div v-else class="player-no-url">No source URL</div>
                 <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
               </div>
               <div class="player-embed">
                 <div class="player-embed-label gmana">G-Mana</div>
-                <iframe
-                  v-if="gmanaEmbedUrl"
-                  :src="gmanaEmbedUrl"
-                  class="player-iframe"
-                  allowfullscreen
-                  allow="autoplay"
-                ></iframe>
+                <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
                 <div v-else class="player-no-url">No G-Mana URL</div>
                 <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
               </div>
@@ -100,8 +81,16 @@
           </div>
         </div>
 
-        <!-- Right: timeline + logs -->
+        <!-- Right: restart workflow + timeline + logs -->
         <div class="detail-right">
+          <!-- Restart Workflow -->
+          <RestartWorkflow
+            v-if="!['RESOLVED', 'CLOSED', 'FAILED'].includes(store.selectedIncident.state)"
+            :incident-id="store.selectedIncident._id"
+            :ds-uuid="store.selectedIncident.dsUuid"
+            :cluster-id="store.selectedIncident.clusterId"
+          />
+
           <!-- Timeline -->
           <div class="info-card">
             <div class="info-title">Timeline</div>
@@ -170,6 +159,8 @@ import { useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import ApprovalTimer from '@/components/ApprovalTimer.vue';
 import TimelineItem from '@/components/TimelineItem.vue';
+import HlsPlayer from '@/components/HlsPlayer.vue';
+import RestartWorkflow from '@/components/RestartWorkflow.vue';
 
 const route = useRoute();
 const store = useIncidentsStore();
@@ -182,20 +173,6 @@ const jiraUrl = computed(() =>
     ? `${import.meta.env.VITE_JIRA_BASE_URL}/browse/${store.selectedIncident.jiraTicketKey}`
     : '#',
 );
-
-const PLAYER_BASE = 'https://automation-8museubsm-samipya-ghimires-projects.vercel.app/';
-
-const sourceEmbedUrl = computed(() => {
-  const url = store.selectedIncident?.sourcePlayerUrl;
-  if (!url) return '';
-  return `${PLAYER_BASE}?url=${encodeURIComponent(url)}`;
-});
-
-const gmanaEmbedUrl = computed(() => {
-  const url = store.selectedIncident?.gManaPlayerUrl;
-  if (!url) return '';
-  return `${PLAYER_BASE}?url=${encodeURIComponent(url)}`;
-});
 
 const confClass = computed(() => {
   const s = store.selectedIncident?.confidenceScore || 0;
@@ -342,7 +319,6 @@ onMounted(() => refresh());
 .player-embed-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .player-embed-label.gmana { color: #4d9de0; }
 .player-embed-label.source { color: #e3a23a; }
-.player-iframe { width: 100%; height: 180px; border: 1px solid #252b36; border-radius: 6px; background: #0d1017; }
 .player-no-url { height: 180px; display: flex; align-items: center; justify-content: center; border: 1px solid #252b36; border-radius: 6px; color: #4f5b6e; font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: #2e3545; word-break: break-all; }
 

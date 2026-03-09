@@ -21,76 +21,133 @@
         </div>
         <div class="kpi">
           <span class="kpi-val green">{{ store.vipIncidents.length }}</span>
-          <span class="kpi-lbl">VIP Channels</span>
+          <span class="kpi-lbl">Prioritized Channels</span>
         </div>
       </div>
 
       <div class="topbar-right">
+        <RedisPanel />
         <span class="live-pill"><span class="live-dot"></span>LIVE</span>
       </div>
     </header>
 
-    <!-- Manual alarm input -->
-    <div class="manual-bar">
-      <input
-        v-model="manualUuid"
-        class="uuid-input"
-        placeholder="Enter ds_uuid to investigate manually..."
-        @keydown.enter="triggerManual"
-      />
-      <button class="btn-primary" :disabled="triggering" @click="triggerManual">
-        {{ triggering ? 'Triggering...' : '⚡ Investigate' }}
-      </button>
-      <span v-if="triggerError" class="trigger-error">{{ triggerError }}</span>
-      <span v-if="triggerSuccess" class="trigger-success">✅ Incident {{ triggerSuccess }} created</span>
+    <!-- Body: sidebar + content -->
+    <div class="body-area">
+      <!-- Left Sidebar -->
+      <nav class="sidebar">
+        <button
+          class="nav-item"
+          :class="{ active: currentView === 'active' }"
+          @click="currentView = 'active'"
+        >
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Active Alarms</span>
+          <span v-if="store.activeIncidents.length > 0" class="nav-badge red">
+            {{ store.activeIncidents.length }}
+          </span>
+        </button>
+
+        <button
+          class="nav-item"
+          :class="{ active: currentView === 'history' }"
+          @click="currentView = 'history'"
+        >
+          <span class="nav-icon">🕐</span>
+          <span class="nav-label">Alarm History</span>
+          <span v-if="store.alarmHistory.length > 0" class="nav-badge gray">
+            {{ store.alarmHistory.length }}
+          </span>
+        </button>
+      </nav>
+
+      <!-- Main content -->
+      <main class="main-content">
+        <!-- Manual alarm input -->
+        <div class="manual-bar">
+          <input
+            v-model="manualUuid"
+            class="uuid-input"
+            placeholder="Enter ds_uuid to investigate manually..."
+            @keydown.enter="triggerManual"
+          />
+          <button class="btn-primary" :disabled="triggering" @click="triggerManual">
+            {{ triggering ? 'Triggering...' : '⚡ Investigate' }}
+          </button>
+          <span v-if="triggerError" class="trigger-error">{{ triggerError }}</span>
+          <span v-if="triggerSuccess" class="trigger-success">✅ Incident {{ triggerSuccess }} created</span>
+        </div>
+
+        <!-- Active Alarms view -->
+        <div v-if="currentView === 'active'" class="incidents-area">
+          <div class="list-header">
+            <div>
+              <h2 class="list-title">Active Alarms</h2>
+              <p class="list-sub">Auto-refreshed every 10s · sorted by newest</p>
+            </div>
+            <div class="filter-tabs">
+              <button
+                v-for="tab in filterTabs"
+                :key="tab.value"
+                class="filter-tab"
+                :class="{ active: activeFilter === tab.value }"
+                @click="setFilter(tab.value)"
+              >{{ tab.label }}</button>
+            </div>
+          </div>
+
+          <div v-if="store.loading" class="loading-msg">Loading...</div>
+          <div v-else-if="store.error" class="error-msg">{{ store.error }}</div>
+          <div v-else-if="filteredIncidents.length === 0" class="empty-msg">No active alarms.</div>
+
+          <div v-else class="incidents-list">
+            <IncidentCard
+              v-for="incident in filteredIncidents"
+              :key="incident._id"
+              :incident="incident"
+              @click="goToDetail(incident._id)"
+            />
+          </div>
+
+          <!-- Pagination -->
+          <div v-if="store.total > 20" class="pagination">
+            <button
+              class="page-btn"
+              :disabled="store.currentPage <= 1"
+              @click="loadPage(store.currentPage - 1)"
+            >← Prev</button>
+            <span class="page-info">Page {{ store.currentPage }} / {{ totalPages }}</span>
+            <button
+              class="page-btn"
+              :disabled="store.currentPage >= totalPages"
+              @click="loadPage(store.currentPage + 1)"
+            >Next →</button>
+          </div>
+        </div>
+
+        <!-- Alarm History view -->
+        <div v-else class="incidents-area">
+          <div class="list-header">
+            <div>
+              <h2 class="list-title">Alarm History</h2>
+              <p class="list-sub">Alarms that disappeared from previous polls · most recent first</p>
+            </div>
+          </div>
+
+          <div v-if="store.alarmHistory.length === 0" class="empty-msg">
+            No alarm history yet. History builds as alarms resolve or disappear during polling.
+          </div>
+
+          <div v-else class="incidents-list">
+            <IncidentCard
+              v-for="incident in store.alarmHistory"
+              :key="incident._id"
+              :incident="incident"
+              @click="goToDetail(incident._id)"
+            />
+          </div>
+        </div>
+      </main>
     </div>
-
-    <!-- Incidents list -->
-    <main class="incidents-area">
-      <div class="list-header">
-        <div>
-          <h2 class="list-title">Active Incidents</h2>
-          <p class="list-sub">Auto-refreshed every 10s · sorted by newest</p>
-        </div>
-        <div class="filter-tabs">
-          <button
-            v-for="tab in filterTabs"
-            :key="tab.value"
-            class="filter-tab"
-            :class="{ active: activeFilter === tab.value }"
-            @click="setFilter(tab.value)"
-          >{{ tab.label }}</button>
-        </div>
-      </div>
-
-      <div v-if="store.loading" class="loading-msg">Loading incidents...</div>
-      <div v-else-if="store.error" class="error-msg">{{ store.error }}</div>
-      <div v-else-if="filteredIncidents.length === 0" class="empty-msg">No incidents found.</div>
-
-      <div v-else class="incidents-list">
-        <IncidentCard
-          v-for="incident in filteredIncidents"
-          :key="incident._id"
-          :incident="incident"
-          @click="goToDetail(incident._id)"
-        />
-      </div>
-
-      <!-- Pagination -->
-      <div v-if="store.total > 20" class="pagination">
-        <button
-          class="page-btn"
-          :disabled="store.currentPage <= 1"
-          @click="loadPage(store.currentPage - 1)"
-        >← Prev</button>
-        <span class="page-info">Page {{ store.currentPage }} / {{ totalPages }}</span>
-        <button
-          class="page-btn"
-          :disabled="store.currentPage >= totalPages"
-          @click="loadPage(store.currentPage + 1)"
-        >Next →</button>
-      </div>
-    </main>
   </div>
 </template>
 
@@ -99,6 +156,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import IncidentCard from '@/components/IncidentCard.vue';
+import RedisPanel from '@/components/RedisPanel.vue';
 
 const store = useIncidentsStore();
 const router = useRouter();
@@ -108,12 +166,13 @@ const triggering = ref(false);
 const triggerError = ref('');
 const triggerSuccess = ref('');
 const activeFilter = ref('all');
+const currentView = ref<'active' | 'history'>('active');
 
 const filterTabs = [
   { label: 'All', value: 'all' },
   { label: 'Active', value: 'active' },
   { label: 'Awaiting Approval', value: 'WAITING_APPROVAL' },
-  { label: 'VIP', value: 'vip' },
+  { label: 'Prioritized', value: 'vip' },
 ];
 
 const filteredIncidents = computed(() => {
@@ -167,7 +226,6 @@ let pollInterval: ReturnType<typeof setInterval>;
 
 onMounted(() => {
   store.fetchIncidents();
-  // Re-fetch full list every 10s so new incidents (any state) appear automatically
   pollInterval = setInterval(() => store.fetchIncidents(store.currentPage), 10_000);
 });
 
@@ -177,6 +235,7 @@ onUnmounted(() => clearInterval(pollInterval));
 <style scoped>
 .dashboard { display: flex; flex-direction: column; min-height: 100vh; background: #0a0d11; }
 
+/* ── Topbar ─────────────────────────────────────────────── */
 .topbar {
   height: 52px; background: #111318; border-bottom: 1px solid #252b36;
   display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0;
@@ -200,7 +259,7 @@ onUnmounted(() => clearInterval(pollInterval));
 .kpi-val.green { color: #3fb950; }
 .kpi-lbl { font-size: 10px; color: #4f5b6e; margin-top: 1px; }
 
-.topbar-right { margin-left: auto; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .live-pill {
   display: flex; align-items: center; gap: 5px;
   background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.25);
@@ -211,9 +270,43 @@ onUnmounted(() => clearInterval(pollInterval));
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+/* ── Body layout ─────────────────────────────────────────── */
+.body-area { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: 200px; flex-shrink: 0;
+  background: #0d1017; border-right: 1px solid #1e2330;
+  display: flex; flex-direction: column;
+  padding: 12px 8px; gap: 4px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 10px; border-radius: 6px;
+  background: transparent; border: none; cursor: pointer;
+  color: #8896aa; font-size: 12px; font-weight: 500;
+  text-align: left; transition: background .15s, color .15s;
+}
+.nav-item:hover { background: #111318; color: #edf2f7; }
+.nav-item.active { background: #161b24; color: #edf2f7; }
+
+.nav-icon { font-size: 13px; flex-shrink: 0; }
+.nav-label { flex: 1; }
+.nav-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 6px;
+  border-radius: 10px; flex-shrink: 0;
+}
+.nav-badge.red { background: rgba(248,81,73,.2); color: #f85149; }
+.nav-badge.gray { background: #1e2330; color: #4f5b6e; }
+
+/* ── Main content ────────────────────────────────────────── */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+
 .manual-bar {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 20px; background: #0d1017; border-bottom: 1px solid #1e2330;
+  flex-shrink: 0;
 }
 .uuid-input {
   flex: 1; max-width: 400px;
