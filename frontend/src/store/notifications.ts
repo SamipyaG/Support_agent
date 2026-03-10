@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 export interface AlarmNotification {
   id: string;         // incident _id
@@ -7,31 +7,57 @@ export interface AlarmNotification {
   state: string;
   createdAt: string;
   isVip: boolean;
+  isRead: boolean;
 }
 
-let dismissTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
 export const useNotificationsStore = defineStore('notifications', () => {
-  const queue = ref<AlarmNotification[]>([]);
+  // Persistent list — stays until cleared (max 50)
+  const notifications = ref<AlarmNotification[]>([]);
+  // Current toast id (null = no toast visible)
+  const toastId = ref<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function push(n: AlarmNotification): void {
-    // Don't duplicate if already in queue
-    if (queue.value.some((x) => x.id === n.id)) return;
-    queue.value.unshift(n);
+  const unreadCount = computed(() => notifications.value.filter((n) => !n.isRead).length);
+
+  const currentToast = computed(() =>
+    toastId.value ? (notifications.value.find((n) => n.id === toastId.value) ?? null) : null,
+  );
+
+  function push(n: Omit<AlarmNotification, 'isRead'>): void {
+    if (notifications.value.some((x) => x.id === n.id)) return;
+    notifications.value.unshift({ ...n, isRead: false });
+    if (notifications.value.length > 50) notifications.value.pop();
+    _showToast(n.id);
     playBeep();
-
-    const timer = setTimeout(() => dismiss(n.id), 8000);
-    dismissTimers.set(n.id, timer);
   }
 
-  function dismiss(id: string): void {
-    const idx = queue.value.findIndex((n) => n.id === id);
-    if (idx >= 0) queue.value.splice(idx, 1);
-    const timer = dismissTimers.get(id);
-    if (timer) { clearTimeout(timer); dismissTimers.delete(id); }
+  function _showToast(id: string): void {
+    if (toastTimer) clearTimeout(toastTimer);
+    toastId.value = id;
+    toastTimer = setTimeout(() => {
+      toastId.value = null;
+      toastTimer = null;
+    }, 5000);
   }
 
-  return { queue, push, dismiss };
+  function dismissToast(): void {
+    if (toastTimer) clearTimeout(toastTimer);
+    toastId.value = null;
+    toastTimer = null;
+  }
+
+  function markRead(id: string): void {
+    const n = notifications.value.find((x) => x.id === id);
+    if (n) n.isRead = true;
+  }
+
+  function markAllRead(): void {
+    notifications.value.forEach((n) => {
+      n.isRead = true;
+    });
+  }
+
+  return { notifications, toastId, currentToast, unreadCount, push, dismissToast, markRead, markAllRead };
 });
 
 function playBeep(): void {

@@ -1,42 +1,39 @@
 <template>
   <Teleport to="body">
-    <div class="notif-stack">
-      <TransitionGroup name="notif">
-        <div
-          v-for="n in notifications.queue"
-          :key="n.id"
-          class="notif-card"
-          :class="{ vip: n.isVip }"
-        >
-          <div class="notif-icon">🔔</div>
+    <Transition name="toast">
+      <div
+        v-if="store.currentToast"
+        class="toast-card"
+        :class="{ vip: store.currentToast.isVip }"
+      >
+        <div class="toast-icon">🔔</div>
 
-          <div class="notif-body">
-            <div class="notif-title">
-              New Alarm
-              <span v-if="n.isVip" class="vip-badge">VIP</span>
-            </div>
-            <div class="notif-channel">{{ n.channelName }}</div>
-            <div class="notif-meta">
-              <span class="notif-state">{{ n.state.replace(/_/g, ' ') }}</span>
-              <span class="notif-time">{{ formatTime(n.createdAt) }}</span>
-            </div>
+        <div class="toast-body">
+          <div class="toast-title">
+            New Alarm
+            <span v-if="store.currentToast.isVip" class="vip-badge">VIP</span>
           </div>
-
-          <button class="notif-close" @click="notifications.dismiss(n.id)">✕</button>
-
-          <div class="notif-progress">
-            <div class="notif-progress-bar" :style="{ animationDuration: '8s' }" />
+          <div class="toast-channel">{{ store.currentToast.channelName }}</div>
+          <div class="toast-meta">
+            <span class="toast-state">{{ store.currentToast.state.replace(/_/g, ' ') }}</span>
+            <span class="toast-time">{{ formatTime(store.currentToast.createdAt) }}</span>
           </div>
         </div>
-      </TransitionGroup>
-    </div>
+
+        <button class="toast-close" @click="store.dismissToast()">✕</button>
+
+        <div class="toast-progress">
+          <div class="toast-progress-bar" :style="{ animationDuration: '5s' }" />
+        </div>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
 import { useNotificationsStore } from '@/store/notifications';
 
-const notifications = useNotificationsStore();
+const store = useNotificationsStore();
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -44,20 +41,12 @@ function formatTime(iso: string): string {
 </script>
 
 <style scoped>
-.notif-stack {
+.toast-card {
   position: fixed;
   top: 20px;
   right: 20px;
   z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   width: 300px;
-  pointer-events: none;
-}
-
-.notif-card {
-  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -67,28 +56,27 @@ function formatTime(iso: string): string {
   border-left: 3px solid #e53e3e;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  pointer-events: all;
   overflow: hidden;
 }
 
-.notif-card.vip {
+.toast-card.vip {
   border-color: #f6ad55;
   border-left-color: #f6ad55;
   background: #1f1a10;
 }
 
-.notif-icon {
+.toast-icon {
   font-size: 18px;
   flex-shrink: 0;
   margin-top: 1px;
 }
 
-.notif-body {
+.toast-body {
   flex: 1;
   min-width: 0;
 }
 
-.notif-title {
+.toast-title {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -100,7 +88,7 @@ function formatTime(iso: string): string {
   margin-bottom: 3px;
 }
 
-.notif-card.vip .notif-title {
+.toast-card.vip .toast-title {
   color: #f6ad55;
 }
 
@@ -113,7 +101,7 @@ function formatTime(iso: string): string {
   border: 1px solid #f6ad5566;
 }
 
-.notif-channel {
+.toast-channel {
   font-size: 13px;
   font-weight: 600;
   color: #edf2f7;
@@ -123,13 +111,13 @@ function formatTime(iso: string): string {
   margin-bottom: 4px;
 }
 
-.notif-meta {
+.toast-meta {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.notif-state {
+.toast-state {
   font-size: 10px;
   color: #a0aec0;
   background: #ffffff10;
@@ -137,12 +125,12 @@ function formatTime(iso: string): string {
   border-radius: 3px;
 }
 
-.notif-time {
+.toast-time {
   font-size: 10px;
   color: #718096;
 }
 
-.notif-close {
+.toast-close {
   background: none;
   border: none;
   color: #718096;
@@ -155,12 +143,12 @@ function formatTime(iso: string): string {
   transition: color 0.15s;
 }
 
-.notif-close:hover {
+.toast-close:hover {
   color: #edf2f7;
 }
 
 /* Progress bar */
-.notif-progress {
+.toast-progress {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -169,7 +157,7 @@ function formatTime(iso: string): string {
   background: #ffffff10;
 }
 
-.notif-progress-bar {
+.toast-progress-bar {
   height: 100%;
   background: #e53e3e;
   width: 100%;
@@ -177,7 +165,7 @@ function formatTime(iso: string): string {
   animation: shrink linear forwards;
 }
 
-.notif-card.vip .notif-progress-bar {
+.toast-card.vip .toast-progress-bar {
   background: #f6ad55;
 }
 
@@ -186,22 +174,16 @@ function formatTime(iso: string): string {
   to   { transform: scaleX(0); }
 }
 
-/* Transition animations */
-.notif-enter-active {
+/* Transition */
+.toast-enter-active {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.notif-leave-active {
+.toast-leave-active {
   transition: all 0.25s ease-in;
 }
-.notif-enter-from {
+.toast-enter-from,
+.toast-leave-to {
   opacity: 0;
   transform: translateX(40px) scale(0.95);
-}
-.notif-leave-to {
-  opacity: 0;
-  transform: translateX(40px) scale(0.95);
-}
-.notif-move {
-  transition: transform 0.3s ease;
 }
 </style>

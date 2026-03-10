@@ -252,7 +252,7 @@ onMounted(() => refresh());
 </script>
 
 <style scoped>
-.detail-view { min-height: 100vh; background: #0a0d11; }
+.detail-view { min-height: 100%; background: #0a0d11; }
 
 .detail-header {
   display: flex; align-items: center; gap: 12px;
