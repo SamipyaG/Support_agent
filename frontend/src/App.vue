@@ -12,13 +12,11 @@
 import { onMounted, onUnmounted } from 'vue';
 import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
-import { useTheme } from '@/composables/useTheme';
 import AppHeader from '@/components/AppHeader.vue';
 import AlarmNotificationToast from '@/components/AlarmNotificationToast.vue';
 
 const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();
-useTheme(); // restore saved theme on boot
 let pollTimer: ReturnType<typeof setInterval>;
 
 onMounted(() => {
@@ -33,8 +31,8 @@ onUnmounted(() => {
 </script>
 
 <style>
-/* ── Theme variables ─────────────────────────────── */
-:root, [data-theme="dark"] {
+/* ── CSS Variables ───────────────────────────────── */
+:root {
   --bg-base:    #0a0d11;
   --bg-card:    #111318;
   --bg-deep:    #0d1017;
@@ -57,17 +55,6 @@ onUnmounted(() => {
   --shadow:     0 8px 24px rgba(0,0,0,.55);
 }
 
-[data-theme="light"] {
-  --bg-base:  #2d3748;
-  --bg-card:  #3a4a61;
-  --bg-deep:  #263040;
-  --bg-hover: #263040;
-  --bd:       #4a5a72;
-  --bd-sub:   #3d4f66;
-  --bd-faint: #344258;
-  --shadow:   0 8px 24px rgba(0,0,0,.3);
-}
-
 /* ── Reset ───────────────────────────────────────── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
@@ -76,7 +63,6 @@ body {
   color: var(--tx-1);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
-  transition: background .2s, color .2s;
 }
 a { color: inherit; text-decoration: none; }
 

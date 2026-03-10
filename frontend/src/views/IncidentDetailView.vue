@@ -92,9 +92,6 @@
         </div>
       </div>
 
-      <button class="btn-theme" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
-        {{ isDark ? '☀' : '🌙' }}
-      </button>
       <button class="btn-refresh" @click="refresh">↻ Refresh</button>
     </header>
 
@@ -251,7 +248,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import { useRedisStore } from '@/store/redis';
-import { useTheme } from '@/composables/useTheme';
 import ApprovalTimer from '@/components/ApprovalTimer.vue';
 import HlsPlayer from '@/components/HlsPlayer.vue';
 import RestartWorkflow from '@/components/RestartWorkflow.vue';
@@ -259,7 +255,6 @@ import RestartWorkflow from '@/components/RestartWorkflow.vue';
 const route = useRoute();
 const store = useIncidentsStore();
 const redisStore = useRedisStore();
-const { isDark, toggle: toggleTheme } = useTheme();
 
 const draftMessage = ref('');
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
@@ -468,13 +463,6 @@ onUnmounted(() => {
 .detail-title-group { display: flex; align-items: center; gap: 8px; }
 .detail-channel { font-size: 15px; font-weight: 600; color: var(--tx-1); }
 
-/* Theme toggle + refresh */
-.btn-theme {
-  background: transparent; border: 1px solid var(--bd); color: var(--tx-2);
-  padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
-  transition: all .15s;
-}
-.btn-theme:hover { background: var(--bg-hover); }
 .btn-refresh {
   background: transparent; border: 1px solid var(--bd); color: var(--tx-2);
   padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;

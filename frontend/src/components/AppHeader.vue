@@ -40,7 +40,6 @@ import AlarmNotificationBell from '@/components/AlarmNotificationBell.vue';
 
 const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();
-
 const waitingApprovals = computed(
   () => store.deduplicatedIncidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
 );
