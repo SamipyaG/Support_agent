@@ -109,7 +109,7 @@ router.get('/:id/logs/ci', async (req: Request, res: Response) => {
 
 /**
  * POST /api/incidents/:id/restart/uh
- * Restart User Handler deployment.
+ * Restart User Handler deployment — records in actionHistory as Manual trigger.
  */
 router.post('/:id/restart/uh', async (req: Request, res: Response) => {
   const incident = getIncidentOrFail(req.params.id, res);
@@ -121,23 +121,47 @@ router.post('/:id/restart/uh', async (req: Request, res: Response) => {
   console.log(`[RESTART UH] Full URL → ${process.env.HUB_MONITOR_BASE_URL}${uhPath}`);
   try {
     const result = await getHubMonitor(req).restartUH(incident.clusterId, incident.dsUuid);
+    store.updateIncident(incident._id, {
+      actionHistory: [
+        ...incident.actionHistory,
+        { action: 'RESTART_UH', executedAt: new Date(), result: result.message || 'Manual restart triggered', approvedBy: 'Manual' },
+      ],
+    });
     res.json(result);
   } catch (err) {
+    store.updateIncident(incident._id, {
+      actionHistory: [
+        ...incident.actionHistory,
+        { action: 'RESTART_UH', executedAt: new Date(), result: `Manual restart failed: ${(err as Error).message}`, approvedBy: 'Manual' },
+      ],
+    });
     res.status(502).json({ error: (err as Error).message });
   }
 });
 
 /**
  * POST /api/incidents/:id/restart/ci
- * Restart Cuemana-In deployment.
+ * Restart Cuemana-In deployment — records in actionHistory as Manual trigger.
  */
 router.post('/:id/restart/ci', async (req: Request, res: Response) => {
   const incident = getIncidentOrFail(req.params.id, res);
   if (!incident) return;
   try {
     const result = await getHubMonitor(req).restartCI(incident.clusterId, incident.dsUuid);
+    store.updateIncident(incident._id, {
+      actionHistory: [
+        ...incident.actionHistory,
+        { action: 'RESTART_CI', executedAt: new Date(), result: result.message || 'Manual restart triggered', approvedBy: 'Manual' },
+      ],
+    });
     res.json(result);
   } catch (err) {
+    store.updateIncident(incident._id, {
+      actionHistory: [
+        ...incident.actionHistory,
+        { action: 'RESTART_CI', executedAt: new Date(), result: `Manual restart failed: ${(err as Error).message}`, approvedBy: 'Manual' },
+      ],
+    });
     res.status(502).json({ error: (err as Error).message });
   }
 });

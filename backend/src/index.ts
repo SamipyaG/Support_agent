@@ -24,7 +24,7 @@ const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '30000', 10);
 
 async function bootstrap() {
   // ── Validate required env vars ─────────────────────────────────────────────
-  const required = ['HUB_MONITOR_BASE_URL', 'HUB_MONITOR_COOKIE', 'G11_BASE_URL', 'G11_AUTH_TOKEN'];
+  const required = ['HUB_MONITOR_BASE_URL', 'G11_BASE_URL', 'G11_AUTH_TOKEN'];
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
     logger.error(`[Bootstrap] Missing required env vars: ${missing.join(', ')}`);
