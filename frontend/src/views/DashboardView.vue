@@ -20,7 +20,7 @@
           <span class="kpi-lbl">Awaiting Approval</span>
         </div>
         <div class="kpi">
-          <span class="kpi-val green">{{ store.vipIncidents.length }}</span>
+          <span class="kpi-val green">{{ vipIncidents.length }}</span>
           <span class="kpi-lbl">Prioritized Channels</span>
         </div>
       </div>
@@ -54,8 +54,8 @@
         >
           <span class="nav-icon">🕐</span>
           <span class="nav-label">Alarm History</span>
-          <span v-if="store.alarmHistory.length > 0" class="nav-badge gray">
-            {{ store.alarmHistory.length }}
+          <span v-if="store.deduplicatedHistory.length > 0" class="nav-badge gray">
+            {{ store.deduplicatedHistory.length }}
           </span>
         </button>
       </nav>
@@ -133,13 +133,13 @@
             </div>
           </div>
 
-          <div v-if="store.alarmHistory.length === 0" class="empty-msg">
+          <div v-if="store.deduplicatedHistory.length === 0" class="empty-msg">
             No alarm history yet. History builds as alarms resolve or disappear during polling.
           </div>
 
           <div v-else class="incidents-list">
             <IncidentCard
-              v-for="incident in store.alarmHistory"
+              v-for="incident in store.deduplicatedHistory"
               :key="incident._id"
               :incident="incident"
               @click="goToDetail(incident._id)"
@@ -155,11 +155,18 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
+import { useVipChannelsStore } from '@/store/vipChannels';
 import IncidentCard from '@/components/IncidentCard.vue';
 import RedisPanel from '@/components/RedisPanel.vue';
 
 const store = useIncidentsStore();
+const vipStore = useVipChannelsStore();
 const router = useRouter();
+
+// Incidents whose channelName belongs to Keshet or Reshet (from G11 channel list)
+const vipIncidents = computed(() =>
+  store.activeIncidents.filter((i) => vipStore.isVipChannel(i.channelName)),
+);
 
 const manualUuid = ref('');
 const triggering = ref(false);
@@ -176,14 +183,14 @@ const filterTabs = [
 ];
 
 const filteredIncidents = computed(() => {
-  if (activeFilter.value === 'all') return store.incidents;
+  if (activeFilter.value === 'all') return store.deduplicatedIncidents;
   if (activeFilter.value === 'active') return store.activeIncidents;
-  if (activeFilter.value === 'vip') return store.vipIncidents;
-  return store.incidents.filter((i) => i.state === activeFilter.value);
+  if (activeFilter.value === 'vip') return vipIncidents.value;
+  return store.deduplicatedIncidents.filter((i) => i.state === activeFilter.value);
 });
 
 const waitingApprovals = computed(
-  () => store.incidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
+  () => store.deduplicatedIncidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
 );
 
 const totalPages = computed(() => Math.ceil(store.total / 20));
@@ -226,6 +233,7 @@ let pollInterval: ReturnType<typeof setInterval>;
 
 onMounted(() => {
   store.fetchIncidents();
+  vipStore.fetchVipChannels();
   pollInterval = setInterval(() => store.fetchIncidents(store.currentPage), 10_000);
 });
 

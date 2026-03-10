@@ -8,6 +8,7 @@ import incidentRoutes from './routes/incidents';
 import approvalRoutes from './routes/approvals';
 import alarmRoutes from './routes/alarms';
 import redisRoutes from './routes/redis';
+import channelRoutes from './routes/channels';
 
 const app = express();
 
@@ -21,5 +22,6 @@ app.use('/api/incidents', incidentRoutes);
 app.use('/api/approve', approvalRoutes);
 app.use('/api/alarms', alarmRoutes);
 app.use('/api/redis', redisRoutes);
+app.use('/api/channels', channelRoutes);
 
 export default app;

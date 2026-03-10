@@ -70,6 +70,36 @@ export interface EscalationLog {
   createdAt: string;
 }
 
+// Higher number = shown when duplicates exist for the same dsUuid
+const STATE_PRIORITY: Record<string, number> = {
+  WAITING_APPROVAL: 6,
+  EXECUTING_ACTION: 5,
+  MONITORING:       4,
+  ANALYZING:        3,
+  ESCALATED:        2,
+  NEW:              1,
+  RESOLVED:         0,
+  CLOSED:           0,
+  FAILED:           0,
+};
+
+function deduplicateByUuid(list: Incident[]): Incident[] {
+  const map = new Map<string, Incident>();
+  for (const inc of list) {
+    const existing = map.get(inc.dsUuid);
+    if (!existing) {
+      map.set(inc.dsUuid, inc);
+    } else {
+      const ep = STATE_PRIORITY[existing.state] ?? 0;
+      const np = STATE_PRIORITY[inc.state]    ?? 0;
+      if (np > ep || (np === ep && inc.updatedAt > existing.updatedAt)) {
+        map.set(inc.dsUuid, inc);
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
 export const useIncidentsStore = defineStore('incidents', () => {
   const incidents = ref<Incident[]>([]);
   const alarmHistory = ref<Incident[]>([]);
@@ -83,22 +113,31 @@ export const useIncidentsStore = defineStore('incidents', () => {
 
   const TERMINAL_STATES = ['RESOLVED', 'CLOSED', 'FAILED'];
 
+  // One card per dsUuid — highest-priority state wins
+  const deduplicatedIncidents = computed(() => deduplicateByUuid(incidents.value));
+  const deduplicatedHistory   = computed(() => deduplicateByUuid(alarmHistory.value));
+
   const activeIncidents = computed(() =>
-    incidents.value.filter((i) => !TERMINAL_STATES.includes(i.state)),
+    deduplicatedIncidents.value.filter((i) => !TERMINAL_STATES.includes(i.state)),
   );
 
-  const vipIncidents = computed(() => incidents.value.filter((i) => i.isVip));
+  const vipIncidents = computed(() => deduplicatedIncidents.value.filter((i) => i.isVip));
 
-  /** Detect alarms that vanished from the active list and move them to history. */
+  /**
+   * Move incidents to history ONLY when their state transitions to terminal
+   * (alarm went OFF / resolved). Incidents that merely vanish from pagination
+   * are NOT moved to history.
+   */
   function _syncHistory(newIncidents: Incident[]): void {
-    const newIds = new Set(newIncidents.map((i) => i._id));
+    const newById = new Map(newIncidents.map((i) => [i._id, i]));
     const historyIds = new Set(alarmHistory.value.map((i) => i._id));
 
     trackedActiveIds.value.forEach((id) => {
-      if (!newIds.has(id) && !historyIds.has(id)) {
-        // Was active last poll, no longer in response — move to history
-        const gone = incidents.value.find((i) => i._id === id);
-        if (gone) alarmHistory.value.unshift(gone);
+      if (historyIds.has(id)) return; // already recorded
+      const updated = newById.get(id);
+      // Only add to history when the state explicitly became terminal (alarm went OFF)
+      if (updated && TERMINAL_STATES.includes(updated.state)) {
+        alarmHistory.value.unshift(updated);
       }
     });
 
@@ -191,6 +230,8 @@ export const useIncidentsStore = defineStore('incidents', () => {
     pendingApprovalId,
     activeIncidents,
     vipIncidents,
+    deduplicatedIncidents,
+    deduplicatedHistory,
     fetchIncidents,
     fetchIncidentById,
     submitApproval,

@@ -58,6 +58,7 @@
               <span class="inst-name mono">{{ inst.instanceName }}</span>
               <span class="inst-meta dim">
                 CPU {{ inst.cpuUsagePercent.toFixed(1) }}%
+                · MEM {{ inst.usedMemory }}<template v-if="inst.maxMemoryBytes > 0">/{{ inst.maxMemory }}</template>
                 · {{ inst.connectedClients }} conn
                 · {{ inst.restartCount }}↺
               </span>
