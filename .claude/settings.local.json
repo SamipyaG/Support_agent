@@ -5,7 +5,8 @@
       "Bash(curl -s http://localhost:3000/health)",
       "Bash(curl -s http://localhost:8080/health)",
       "Bash(npm install hls.js --save)",
-      "Bash(npm install --save-dev nodemon ts-node)"
+      "Bash(npm install --save-dev nodemon ts-node)",
+      "Bash(node -e \":*)"
     ]
   }
 }

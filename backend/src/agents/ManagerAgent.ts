@@ -2,46 +2,54 @@
  * ManagerAgent.ts
  * ============================================================
  * AGENT 3: MANAGER AGENT — Central Orchestrator
+ * STATUS: ACTIVE
+ * TYPE:   Orchestrator (calls GPT-4o, writes all incident state, executes all actions)
  *
- * Primary Responsibility:
- *   Coordinate all agents and make final decisions on incidents.
+ * ─── ROLE ─────────────────────────────────────────────────
+ * Central coordinator. The ONLY agent that calls GPT-4o.
+ * The ONLY agent that writes incident state to InMemoryStore.
+ * The ONLY agent that calls HubMonitorTool for restarts.
+ * All agents communicate ONLY through the ManagerAgent.
  *
- * Source vs G-Mana Detection (no player available):
- *   We cannot check stream URLs directly. Instead:
- *   - SOURCE_ISSUE: if multiple channels share the same source URL (alarmUrl)
- *     and all fire alarms within 1 minute → source is down, notify customer
- *   - GMANA_ISSUE: single-channel alarm that passes the repeat threshold
- *     → wait, then restart UH (then CI if UH fails)
+ * ─── COMMUNICATION IN ─────────────────────────────────────
+ * Source 1: Hub Monitor polling → AlarmData[] { dsUuid, channelName, status, errorType, reason }
+ * Source 2: StreamAnalyzerAgent → StreamAnalysisReport (includes ds_uuid, urls, cluster)
+ * Source 3: ResourcesAnalyzerAgent → ResourcesAnalysisReport
+ * Source 4: PlayerAnalyzerAgent (future) → PlayerAnalyzerReport
+ * Source 5: ApprovalService → { decision: approved|rejected|timeout, decidedBy }
+ * Source 6: SenderAgent (future) → MessageDraft for review
  *
- * Coordination Flow:
+ * ─── WHAT IT DISTRIBUTES ──────────────────────────────────
+ * To StreamAnalyzerAgent:    alarm data + streamUrls
+ * To ResourcesAnalyzerAgent: clusterName + dsUuid (from StreamAnalysisReport)
+ * To PlayerAnalyzerAgent:    sourceUrl + gManaUrl (future)
+ * To GPT-4o:                 getManagerSynthesisPrompt() + buildManagerSynthesisContext()
+ * To ApprovalService:        waitForApproval(incidentId, action, context, timeout)
+ * To HubMonitorTool:         restartUH(cluster, dsUuid) / restartCI(cluster, dsUuid)
+ * To InMemoryStore:          createIncident() / updateIncident() at every state change
+ * To SenderAgent (future):   situation + incidentContext for message draft
  *
- *   Every POLL_INTERVAL_MS seconds:
- *     → GET /sendalarms/status/alarms
- *     → detectSourceIssues() on the full alarm set
- *     → For each source-affected alarm: handleSourceAlarm()
- *     → For each remaining alarm: handleAlarm()
+ * ─── STATE MACHINE ────────────────────────────────────────
+ * NEW              → alarm received, threshold not met, watching
+ * ANALYZING        → StreamAnalyzer ran, distributing data to other agents
+ * WAITING_APPROVAL → GPT-4o decision ready, awaiting human confirmation
+ * EXECUTING_ACTION → restart command being sent to Hub Monitor API
+ * MONITORING       → restart complete, verifying stream health (3 checks × 30s)
+ * RESOLVED         → no action needed (source down or transient alarm) — terminal
+ * ESCALATED        → rejected / VIP / max restarts / confidence too low — terminal
+ * CLOSED           → stream healthy, pattern saved — terminal
  *
- *   handleAlarm():
- *     status=OFF → handleClosedAlarm()    close open incident
- *     status=ON  → handleActiveAlarm()    investigate
+ * ─── ACTION ORDER ─────────────────────────────────────────
+ * attempt 0 → RESTART_UH   (restartAttempts=0)
+ * attempt 1 → RESTART_CI   (restartAttempts=1)
+ * attempt 2 → MOVE_TO_SOURCE + ESCALATED (max restarts reached)
  *
- *   handleActiveAlarm():
- *     → Existing incident (not NEW state) → handleExistingChannelAlarm()
- *     → New or NEW-state incident         → handleNewChannelAlarm()
+ * ─── EARLY EXITS ──────────────────────────────────────────
+ * SOURCE_ISSUE → state=RESOLVED, customer notified, pods NOT touched, STOP
+ * NO_ISSUE     → no state change, no action, STOP
  *
- *   handleNewChannelAlarm() — 3 scenarios:
- *     1. Below repeat threshold  → create tracking incident, wait
- *     2. Threshold met, wait not exceeded → update label, hold
- *     3. Threshold met + wait exceeded   → runFullInvestigation()
- *
- *   runFullInvestigation():
- *     STEP 1 → Get stream URLs from G11
- *     STEP 2 → Run ResourcesAnalyzerAgent (UH logs, CI logs, Redis)
- *     STEP 3 → Send resources report to GPT-4o for final decision
- *     STEP 4 → Update UI → WAITING_APPROVAL
- *     STEP 5 → Wait for human approval (timeout = auto-approve)
- *     STEP 6 → Execute action: RESTART_UH → RESTART_CI → ESCALATE
- *     STEP 7 → Verify by polling alarm status → CLOSED
+ * ─── FALLBACK ─────────────────────────────────────────────
+ * If GPT-4o call fails → ruleBasedDecision() applies hard-coded rules from agent reports.
  * ============================================================
  */
 
@@ -50,211 +58,7 @@ import { HubMonitorTool, AlarmData, StreamUrls } from '../tools/HubMonitorTool';
 import { ResourcesAnalyzerAgent, ResourcesAnalysisReport } from './ResourcesAnalyzerAgent';
 import { ApprovalService } from '../services/ApprovalService';
 
-// ─── Platform knowledge (used by GPT-4o synthesis prompt) ────────────────────
-
-const PLATFORM_CONTEXT = `
-You are an expert support engineer at G-Mana, a Server-Side Ad Insertion (SSAI) platform.
-
-## What is G-Mana?
-G-Mana is a cloud-based SSAI platform. It intercepts a broadcaster's live HLS or DASH stream,
-stitches targeted ads at SCTE-35 cue points, and delivers a seamless combined stream to viewers.
-The platform runs on Kubernetes clusters and handles thousands of concurrent streams.
-
-## Core Terminology
-
-**ds_uuid**: A unique identifier for each stream. Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
-Every alarm, pod, and deployment is identified by ds_uuid.
-
-**HLS**: Apple's streaming protocol. Uses .m3u8 manifest files and .ts segments.
-SCTE-35 ad cue markers are embedded as EXT-X-DATERANGE or EXT-X-CUE-OUT tags.
-
-**DASH**: MPEG's streaming protocol. Uses .mpd manifest files.
-
-**SCTE-35**: Broadcast standard for signaling ad break opportunities.
-
-## System Components
-
-**User Handler (UH)**: Main pod managing a stream session.
-Pod format: user-handler-{ds_uuid}
-When UH crashes → stream returns 502/other status rather than 200 and becomes unreachable.
-Each pod has resources like memory, CPU, response time, network.
-
-**CueMana-In (CI)**: Ad insertion engine pod.
-Pod format: cuemana-in-{ds_uuid}
-When CI fails → ads stop being inserted (no SCTE-35 markers in G-Mana output).
-
-**Hub Monitor**: Internal monitoring API — source of truth for alarms, pod logs, Redis health.
-
-**Clusters**: Kubernetes clusters. Named: hub1x, hub21, stg
-
-**Pod Stability Rule**: Any pod with more than 10 restarts is considered unstable.
-
-## VIP Customers
-- **Keshet**: Premium customer. Uses Keshet Redis cluster. Immediate escalation required.
-- **Reshet**: Premium customer. Uses Reshet Redis cluster. Immediate escalation required.
-VIP channels must NEVER wait for automated resolution. Notify Yoni (senior engineer) immediately.
-`;
-
-const ERROR_CODEBOOK = `
-## G-Mana Error Codes
-
-| Error Code                   | Meaning                                      | Fix               |
-|------------------------------|----------------------------------------------|-------------------|
-| MAIN_MANIFEST_BAD_RESPONSE   | G-Mana manifest stale or malformed           | RESTART_UH        |
-| MPD_MANIFEST_BAD_RESPONSE    | G-Mana MPD manifest stale or malformed       | RESTART_UH        |
-| SEGMENT_MISMATCH_ERROR       | G-Mana segments don't match source segments  | RESTART_UH        |
-| SSAI_AD_BREAK_NOT_DETECTED   | No SCTE-35 markers in G-Mana output          | RESTART_CI        |
-| HTTP_502_UPSTREAM_ERROR      | G-Mana endpoint returns 502 Bad Gateway      | RESTART_UH        |
-| SOURCE_TIMEOUT               | Source broadcaster stream times out          | NOTIFY_CUSTOMER   |
-| SOURCE_STREAM_DOWN           | Source broadcaster stream unreachable        | NOTIFY_CUSTOMER   |
-| STREAM_UNAVAILABLE           | Stream not accessible                        | RESTART_UH        |
-| BOTH_STREAMS_DOWN            | Both G-Mana and source unreachable           | ESCALATE          |
-| REDIS_DEGRADED               | Redis cluster not healthy                    | ESCALATE (DevOps) |
-| UH_POD_CRASH_LOOP            | UH pod in CrashLoopBackOff                   | RESTART_UH        |
-| CI_POD_CRASH_LOOP            | CI pod in CrashLoopBackOff                   | RESTART_CI        |
-| POD_UNSTABLE                 | Pod restart count > 10                       | RESTART + ESCALATE|
-| HIGH_CPU                     | Redis CPU > 85%                              | ESCALATE (DevOps) |
-| HIGH_MEMORY                  | Redis memory > 90%                           | ESCALATE (DevOps) |
-| NO_STREAM_ISSUE              | Both streams healthy                         | MONITOR           |
-`;
-
-const DECISION_RULES = `
-## Decision Rules (ALL AGENTS MUST FOLLOW)
-
-1. SOURCE RULE: If source stream is down → NOTIFY_CUSTOMER only.
-   NEVER restart G-Mana pods when the source is broken. It is not our fault.
-
-2. REDIS RULE: If Redis cluster is down → ESCALATE to DevOps immediately.
-   Pod restarts will not help when session state storage is unavailable.
-
-3. VIP RULE: If channel is Keshet or Reshet → escalate to Yoni immediately, regardless of confidence.
-   VIP customers must never wait for automated resolution.
-
-4. CONFIDENCE RULE: If confidence score < 80% → recommend ESCALATE.
-   Never guess when uncertain. Human review is safer than a wrong restart.
-
-5. POD STABILITY RULE: If any pod has restarted more than 10 times → treat as unstable.
-   Report as POD_UNSTABLE and escalate alongside any restart action.
-
-6. RESTART ORDER: Always try in this sequence:
-   a. RESTART_UH first  (manifest/502/sequence issues)
-   b. RESTART_CI second (ad insertion/SCTE-35 issues)
-   c. MOVE_TO_SOURCE as last resort (viewers see raw stream, no ads)
-
-7. MAX RESTARTS: Never restart the same pod more than 2 times per incident.
-   After 2 failed restarts → MOVE_TO_SOURCE + escalate to Yoni.
-
-8. NOISE FILTER: Same channel alarmed more than 3 times in 60 minutes →
-   flag as recurring pattern, escalate instead of restarting again.
-
-9. COMMUNICATION RULE: Any message to a customer must be drafted by SenderAgent (future),
-   reviewed by ManagerAgent, and approved by the support team before sending.
-`;
-
-// ─── GPT-4o synthesis prompt — owned by ManagerAgent ─────────────────────────
-
-function getManagerSynthesisPrompt(): string {
-  return `
-${PLATFORM_CONTEXT}
-${ERROR_CODEBOOK}
-${DECISION_RULES}
-
-## Your Role
-You are the ManagerAgent — the central decision-maker of the G-Mana monitoring system.
-You have received analysis reports from the following agents:
-  - StreamAnalyzerAgent: checked source and G-Mana stream URLs for errors
-  - ResourcesAnalyzerAgent: checked UH pod, CI pod, and Redis cluster health
-
-Your job is to synthesize all reports and recommend the single best action.
-
-## Correlation Rules
-- StreamAnalyzer says GMANA_ISSUE AND ResourcesAnalyzer says UH errors → RESTART_UH (high confidence)
-- StreamAnalyzer says GMANA_ISSUE AND ResourcesAnalyzer says CI errors → RESTART_CI (high confidence)
-- StreamAnalyzer says GMANA_ISSUE AND ResourcesAnalyzer says REDIS_DOWN → ESCALATE (pod restart won't help)
-- StreamAnalyzer says GMANA_ISSUE AND ResourcesAnalyzer says NONE → RESTART_UH (moderate confidence)
-- Either agent confidence < 80% → ESCALATE
-- VIP channel (isVip=true) AND confidence < 80% → ESCALATE
-- Any pod with restartCount > 10 → note as unstable, still try restart but flag for escalation
-
-## Output Format
-Respond ONLY in valid JSON (no markdown, no explanation outside JSON):
-{
-  "recommendedAction": "RESTART_UH | RESTART_CI | NOTIFY_CUSTOMER_SOURCE_DOWN | ESCALATE | MOVE_TO_SOURCE",
-  "confidenceScore": 0-100,
-  "explanation": "one sentence explaining the decision based on both reports",
-  "errorCode": "the most specific matching error code from the codebook"
-}
-`;
-}
-
-// ─── Context builder for GPT-4o synthesis call ───────────────────────────────
-
-function buildManagerSynthesisContext(params: {
-  alarm: {
-    channelName: string;
-    errorType: string;
-    reason: string;
-    statusCode: number;
-  };
-  streamReport: {
-    rootCauseAssumption: string;
-    sourceStatus: string;
-    gmanaStatus: string;
-    severity: string;
-    confidenceScore: number;
-    flaggedForFurtherAnalysis: boolean;
-    isVip: boolean;
-    alarmType: string;
-    details: string;
-    sourceResult: { hasError: boolean; statusCode: number | null; errorType: string | null };
-    gmanaResult: { hasError: boolean; statusCode: number | null; errorType: string | null };
-  };
-  resourcesReport: {
-    affectedComponent: string;
-    resourceIssueType: string;
-    severity: string;
-    confidenceScore: number;
-    flaggedForFurtherAnalysis: boolean;
-    possibleStreamImpact: string;
-    details: string;
-  } | null;
-}): string {
-  return `
-## StreamAnalyzerAgent Report
-- Channel: ${params.streamReport.isVip ? `${params.alarm.channelName} ⭐ VIP` : params.alarm.channelName}
-- Alarm Type: ${params.streamReport.alarmType}
-- Source Status: ${params.streamReport.sourceStatus}
-- G-Mana Status: ${params.streamReport.gmanaStatus}
-- Root Cause Assumption: ${params.streamReport.rootCauseAssumption}
-- Severity: ${params.streamReport.severity}
-- Confidence Score: ${params.streamReport.confidenceScore}%
-- Flagged for Further Analysis: ${params.streamReport.flaggedForFurtherAnalysis}
-- Source HTTP status: ${params.streamReport.sourceResult.statusCode} | error: ${params.streamReport.sourceResult.errorType ?? 'none'}
-- G-Mana HTTP status: ${params.streamReport.gmanaResult.statusCode} | error: ${params.streamReport.gmanaResult.errorType ?? 'none'}
-- Details: ${params.streamReport.details}
-
-## ResourcesAnalyzerAgent Report
-${
-  params.resourcesReport
-    ? `- Affected Component: ${params.resourcesReport.affectedComponent}
-- Resource Issue Type: ${params.resourcesReport.resourceIssueType}
-- Severity: ${params.resourcesReport.severity}
-- Confidence Score: ${params.resourcesReport.confidenceScore}%
-- Flagged for Further Analysis: ${params.resourcesReport.flaggedForFurtherAnalysis}
-- Possible Stream Impact: ${params.resourcesReport.possibleStreamImpact}
-- Details: ${params.resourcesReport.details}`
-    : '- ResourcesAnalyzerAgent did not return a report (fetch failed). Treat infrastructure status as unknown.'
-}
-
-## Original Alarm Data
-- Error Type: ${params.alarm.errorType}
-- Reason: ${params.alarm.reason}
-- HTTP Status: ${params.alarm.statusCode}
-
-Based on all agent reports above, provide your final recommendation.
-${params.streamReport.isVip ? '\n⭐ VIP CHANNEL — apply VIP decision rules strictly.' : ''}
-`;
-}
+import { getManagerSynthesisPrompt, buildManagerSynthesisContext } from './SystemKnowledgeBase';
 import { store, Incident } from '../store/InMemoryStore';
 import { logger } from '../utils/logger';
 import { sleep } from '../utils/retry';

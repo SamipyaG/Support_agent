@@ -1,20 +1,66 @@
 /**
  * ResourcesAnalyzerAgent.ts
  * ============================================================
- * AGENT 2: RESOURCES ANALYZER
+ * AGENT 2: RESOURCES ANALYZER AGENT
+ * STATUS: ACTIVE
+ * TYPE:   Rule-based specialist (no GPT-4o, no state writes)
  *
- * Primary Responsibility:
- *   Monitor system infrastructure and resource stability.
+ * ─── ROLE ─────────────────────────────────────────────────
+ * Second analysis agent. Checks all infrastructure health for
+ * the affected channel. Runs after ManagerAgent distributes
+ * data from the StreamAnalysisReport.
  *
- * What this agent does:
- *   1. Fetches UH pod logs, CI pod logs, and Redis health — in parallel
- *   2. Scans logs for ERROR / WARN / CrashLoop patterns
- *   3. Checks Redis instance health (CPU, memory, restart count)
- *   4. Identifies which component is affected (UH, CI, Redis, or none)
- *   5. Calculates a confidence score
- *   6. Returns a ResourcesAnalysisReport to the ManagerAgent
+ * ─── COMMUNICATION IN ─────────────────────────────────────
+ * Caller: ManagerAgent
+ * Method: resourcesAnalyzer.analyze(clusterName, dsUuid)
+ *   clusterName — Kubernetes cluster name (e.g. "hub1x")
+ *   dsUuid      — unique session ID for the affected channel
  *
- * If confidence < 80%, the report is flagged for further analysis.
+ * ─── INTERNAL LOGIC ───────────────────────────────────────
+ * All three checks run simultaneously via Promise.allSettled (partial failure OK):
+ *
+ * CHECK 1 → UH Pod
+ *   GET /sendalarms/clusters/{cluster}/pods/user-handler-{dsUuid}/logs
+ *   Pod state check: Running | Pending | Failed
+ *   Restart count: if > 10 → POD_UNSTABLE
+ *   Log scan: ERROR, WARN, CrashLoop, OOMKilled, panic
+ *
+ * CHECK 2 → CI Pod
+ *   GET /sendalarms/clusters/{cluster}/pods/cuemana-in-{dsUuid}/logs
+ *   Pod state check: Running | Pending | Failed
+ *   Restart count: if > 10 → POD_UNSTABLE
+ *   Log scan: ERROR, WARN, CrashLoop
+ *
+ * CHECK 3 → Redis Clusters
+ *   GET /sendalarms/clusters/{cluster}/redis-instances
+ *   Monitors: Reshet cluster | Keshet cluster | General customers cluster
+ *   Per instance: isHealthy, cpuUsagePercent, usedMemoryBytes/maxMemoryBytes
+ *
+ * Detection priority (first match wins):
+ *   Redis isHealthy=false          → REDIS_DOWN   REDIS   critical  92%
+ *   UH errors AND CI errors        → POD_CRASH    UH      high      82%
+ *   UH errors only                 → POD_CRASH    UH      high      87%
+ *   CI errors only                 → POD_CRASH    CI      medium    82%
+ *   Redis memory > 90%             → MEMORY_HIGH  REDIS   medium    75%
+ *   Redis CPU > 85%                → CPU_HIGH     REDIS   low       70%
+ *   Restart count > 10             → POD_UNSTABLE UH/CI   high      82%
+ *   None of the above              → NONE         NONE    low       85%
+ *
+ * ─── COMMUNICATION OUT ────────────────────────────────────
+ * Returns to: ManagerAgent (direct TypeScript return value)
+ * Report: ResourcesAnalysisReport {
+ *   clusterName, dsUuid,
+ *   uhLogs, ciLogs, redisResources,
+ *   affectedComponent, resourceIssueType, severity,
+ *   confidenceScore, possibleStreamImpact, details,
+ *   flaggedForFurtherAnalysis
+ * }
+ *
+ * ─── STATE CHANGES ────────────────────────────────────────
+ * None. ManagerAgent writes all incident state.
+ *
+ * IMPORTANT: Logs are fetched BEFORE any restart is triggered.
+ * UH and CI logs are lost when a pod restarts — fetching here preserves evidence.
  * ============================================================
  */
 

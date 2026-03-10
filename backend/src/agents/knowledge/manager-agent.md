@@ -22,7 +22,7 @@ All agents communicate ONLY through the ManagerAgent.
 | Hub Monitor polling     | `AlarmData[] { dsUuid, channelName, status, errorType, reason }` |
 | StreamAnalyzerAgent     | `StreamAnalysisReport` (includes ds_uuid, urls, cluster)     |
 | ResourcesAnalyzerAgent  | `ResourcesAnalysisReport`                                    |
-| AnalyzeStreamAgent (future) | `AnalyzeStreamReport`                                    |
+| PlayerAnalyzerAgent (future) | `PlayerAnalyzerReport`                                    |
 | ApprovalService         | `{ decision: "approved"|"rejected"|"timeout", decidedBy }`  |
 | SenderAgent (future)    | `MessageDraft` for review                                    |
 
@@ -34,7 +34,7 @@ All agents communicate ONLY through the ManagerAgent.
 |-------------------------|---------------------------------------------------------------|
 | StreamAnalyzerAgent     | alarm data + streamUrls                                       |
 | ResourcesAnalyzerAgent  | clusterName + dsUuid (from StreamAnalysisReport)             |
-| AnalyzeStreamAgent      | sourceUrl + gManaUrl (future)                                |
+| PlayerAnalyzerAgent      | sourceUrl + gManaUrl (future)                                |
 | GPT-4o                  | `getManagerSynthesisPrompt()` + `buildManagerSynthesisContext()` |
 | ApprovalService         | `waitForApproval(incidentId, action, context, timeout)`      |
 | HubMonitorTool          | `restartUH(cluster, dsUuid)` / `restartCI(cluster, dsUuid)` |
@@ -63,11 +63,11 @@ All agents communicate ONLY through the ManagerAgent.
 ### Step 4 — DISTRIBUTE DATA TO ANALYSIS AGENTS
 - Extracts from StreamAnalysisReport: `clusterName`, `dsUuid`
 - Calls: `resourcesAnalyzer.analyze(clusterName, dsUuid)` (ACTIVE)
-- Future: `analyzeStreamAgent.analyze(sourceUrl, gManaUrl)` (FUTURE)
+- Future: `playerAnalyzerAgent.analyze(sourceUrl, gManaUrl)` (FUTURE)
 - Sets incident state → `ANALYZING`
 
 ### Step 5 — RECEIVE AGENT REPORTS
-- Collects `ResourcesAnalysisReport` (and future: `AnalyzeStreamReport`)
+- Collects `ResourcesAnalysisReport` (and future: `PlayerAnalyzerReport`)
 
 ### Step 6 — GPT-4o SYNTHESIS
 - System prompt: `getManagerSynthesisPrompt()` (defined in `ManagerAgent.ts`)

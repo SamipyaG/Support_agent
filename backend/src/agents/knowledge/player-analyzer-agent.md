@@ -1,6 +1,6 @@
-# AnalyzeStreamAgent
+# PlayerAnalyzerAgent
 
-**File:** `backend/src/agents/AnalyzeStreamAgent.ts` (TO BE CREATED)
+**File:** `backend/src/agents/PlayerAnalyzerAgent.ts` (TO BE CREATED)
 **Status:** FUTURE — not yet implemented
 
 ---
@@ -15,7 +15,7 @@ observes stream for ~30 seconds, detects manifest and segment-level errors.
 ## Communication In
 
 **Caller:** ManagerAgent
-**Method:** `analyzeStreamAgent.analyze(sourceUrl, gManaUrl)`
+**Method:** `playerAnalyzerAgent.analyze(sourceUrl, gManaUrl)`
 
 Data will come from ManagerAgent, which extracted it from StreamAnalysisReport.
 
@@ -51,7 +51,7 @@ Data will come from ManagerAgent, which extracted it from StreamAnalysisReport.
 
 ```ts
 [
-  AnalyzeStreamReport {
+  PlayerAnalyzerReport {
     segmentTimeRange,
     manifestdownloadTime,
     errorType,
@@ -59,7 +59,7 @@ Data will come from ManagerAgent, which extracted it from StreamAnalysisReport.
     performanceMetrics,
     details,
     confidenceScore,
-    screenshot
+    screenshots
   }
 ]
 ```

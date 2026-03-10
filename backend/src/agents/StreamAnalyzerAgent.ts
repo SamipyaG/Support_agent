@@ -1,20 +1,60 @@
 /**
  * StreamAnalyzerAgent.ts
  * ============================================================
- * AGENT 1: STREAM ANALYZER
+ * AGENT 1: STREAM ANALYZER AGENT
+ * STATUS: ACTIVE
+ * TYPE:   Rule-based specialist (no GPT-4o, no state writes)
  *
- * Primary Responsibility:
- *   Monitor channel streams and detect streaming-related issues.
+ * ─── ROLE ─────────────────────────────────────────────────
+ * First agent to run in every alarm cycle. Collects stream
+ * metadata, checks both stream URLs, evaluates alarm type,
+ * detects VIP, calculates confidence score.
+ * Sends full report (including ds_uuid, urls, cluster) to ManagerAgent.
  *
- * What this agent does:
- *   1. Receives an alarm and the channel's stream URLs
- *   2. Checks both source and G-Mana stream URLs in parallel
- *   3. Determines whether the issue is in the source or G-Mana
- *   4. Identifies VIP customers
- *   5. Calculates a confidence score
- *   6. Returns a StreamAnalysisReport to the ManagerAgent
+ * ─── COMMUNICATION IN ─────────────────────────────────────
+ * Caller: ManagerAgent
+ * Method: streamAnalyzer.analyze(alarm, streamUrls)
+ *   alarm.dsUuid           — unique session ID
+ *   alarm.channelName      — channel that triggered the alarm
+ *   alarm.errorType        — alarm code (e.g. MAIN_MANIFEST_BAD_RESPONSE)
+ *   alarm.reason           — reason text from Hub Monitor
+ *   alarm.statusCode       — HTTP status code in the alarm
+ *   streamUrls.sourcePlayerUrl — raw broadcaster stream URL
+ *   streamUrls.gManaPlayerUrl  — G-Mana output stream URL
+ *   streamUrls.clusterName     — Kubernetes cluster (e.g. hub1x)
+ *   streamUrls.customerName    — customer name (used for VIP detection)
  *
- * If confidence < 80%, the report is flagged for further analysis.
+ * ─── INTERNAL LOGIC ───────────────────────────────────────
+ * 1. Identify channel using ds_uuid
+ * 2. Validate stream metadata (sourceUrl, gManaUrl, cluster)
+ * 3. ErrorDetectionPlayerTool.checkBoth(sourceUrl, gManaUrl) — both in parallel
+ * 4. Analyze alarm type: MAIN_MANIFEST_BAD_RESPONSE | SOURCE_TIMEOUT | STREAM_UNAVAILABLE
+ * 5. Root cause decision:
+ *      source=DOWN + gmana=DOWN  → BOTH_DOWN      confidence=90  severity=low
+ *      source=DOWN + gmana=OK   → SOURCE_ISSUE    confidence=95
+ *      source=OK   + gmana=DOWN → GMANA_ISSUE     confidence=70-88 severity=high/critical
+ *      source=OK   + gmana=OK  → NO_ISSUE         confidence=85  severity=low
+ * 6. VIP detection: channelName or customerName contains "keshet" or "reshet"
+ * 7. Confidence scoring by alarm-to-error pattern alignment
+ * 8. flaggedForFurtherAnalysis = confidence < 80%
+ *
+ * ─── COMMUNICATION OUT ────────────────────────────────────
+ * Returns to: ManagerAgent (direct TypeScript return value)
+ * Report: StreamAnalysisReport {
+ *   channelName, dsUuid, isVip,
+ *   alarmType, alarmReason,
+ *   sourceStatus, gmanaStatus,
+ *   rootCauseAssumption, severity, confidenceScore,
+ *   sourceResult, gmanaResult,
+ *   flaggedForFurtherAnalysis, details
+ * }
+ *
+ * ─── STATE CHANGES ────────────────────────────────────────
+ * None. ManagerAgent writes all incident state based on this report.
+ *
+ * ─── ENABLES EARLY EXITS ──────────────────────────────────
+ * SOURCE_ISSUE → ManagerAgent notifies customer only, no pod restarts, STOP
+ * NO_ISSUE     → Alarm was transient, no action needed, STOP
  * ============================================================
  */
 

@@ -86,7 +86,7 @@ If `GMANA_ISSUE` or `BOTH_DOWN`:
 - ManagerAgent extracts: ds_uuid, source_url, g_mana_url, clusterName
 - Distributes to:
   - → `ResourcesAnalyzerAgent` (ACTIVE — receives cluster + dsUuid)
-  - → `AnalyzeStreamAgent`     (FUTURE — will receive stream URLs)
+  - → `PlayerAnalyzerAgent`     (FUTURE — will receive stream URLs)
 - Both agents launched in parallel.
 - Sets incident state → `ANALYZING`
 
@@ -124,7 +124,7 @@ Returns `ResourcesAnalysisReport` to ManagerAgent:
 ---
 
 ### STEP 5B — DEEP STREAM ANALYSIS (Future)
-**Agent:** AnalyzeStreamAgent (NOT YET IMPLEMENTED)
+**Agent:** PlayerAnalyzerAgent (NOT YET IMPLEMENTED)
 
 Opens source URL + G-Mana URL using a player debugging tool.
 Observes stream for ~30 seconds. Detects:
@@ -242,7 +242,7 @@ Hub Monitor API
                                            │
                               ┌────────────┴────────────┐
                               ▼                         ▼
-                   ResourcesAnalyzerAgent      AnalyzeStreamAgent
+                   ResourcesAnalyzerAgent      PlayerAnalyzerAgent
                      (ACTIVE)                    (FUTURE)
                    ├─ getUHLogs()
                    ├─ getCILogs()
