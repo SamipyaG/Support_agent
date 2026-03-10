@@ -1,7 +1,5 @@
 <template>
   <div class="dashboard">
-<<<<<<< HEAD
-=======
     <!-- Topbar -->
     <header class="topbar">
       <div class="brand">
@@ -28,7 +26,6 @@
       </div>
 
       <div class="topbar-right">
-        <RedisPanel />
         <button class="btn-theme" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
           {{ isDark ? '☀' : '🌙' }}
         </button>
@@ -36,7 +33,6 @@
       </div>
     </header>
 
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
     <!-- Body: sidebar + content -->
     <div class="body-area">
       <!-- Left Sidebar -->
@@ -161,20 +157,18 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
-<<<<<<< HEAD
 import { useVipChannelsStore } from '@/store/vipChannels';
-=======
 import { useTheme } from '@/composables/useTheme';
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
 import IncidentCard from '@/components/IncidentCard.vue';
 
 const store = useIncidentsStore();
-<<<<<<< HEAD
 const vipStore = useVipChannelsStore();
-=======
 const { isDark, toggle: toggleTheme } = useTheme();
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
 const router = useRouter();
+
+const waitingApprovals = computed(() =>
+  store.activeIncidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
+);
 
 // Incidents whose channelName belongs to Keshet or Reshet (from G11 channel list)
 const vipIncidents = computed(() =>
@@ -249,52 +243,48 @@ onUnmounted(() => clearInterval(pollInterval));
 </script>
 
 <style scoped>
-<<<<<<< HEAD
-.dashboard { display: flex; flex-direction: column; height: 100%; background: #0a0d11; }
-=======
-.dashboard { display: flex; flex-direction: column; min-height: 100vh; background: #0a0d11; }
+.dashboard { display: flex; flex-direction: column; height: 100%; background: var(--bg-base); }
 
 /* ── Topbar ─────────────────────────────────────────────── */
 .topbar {
-  height: 52px; background: #111318; border-bottom: 1px solid #252b36;
+  height: 52px; background: var(--bg-card); border-bottom: 1px solid var(--bd);
   display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0;
 }
 .brand { display: flex; align-items: center; gap: 10px; margin-right: 20px; }
 .brand-pulse {
-  width: 7px; height: 7px; border-radius: 50%; background: #3fb950;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--col-ok);
   box-shadow: 0 0 0 3px rgba(63,185,80,.2);
   animation: pulse 2.5s ease-in-out infinite;
 }
-.brand-pulse.pulse-red { background: #f85149; box-shadow: 0 0 0 3px rgba(248,81,73,.2); }
+.brand-pulse.pulse-red { background: var(--col-err); box-shadow: 0 0 0 3px rgba(248,81,73,.2); }
 @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:.5 } }
 .brand-name { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; letter-spacing: .06em; }
-.brand-tag { font-size: 10px; color: #4f5b6e; }
+.brand-tag { font-size: 10px; color: var(--tx-3); }
 
 .kpi-group { display: flex; gap: 20px; flex: 1; }
 .kpi { display: flex; flex-direction: column; }
 .kpi-val { font-family: monospace; font-size: 20px; font-weight: 700; line-height: 1; }
-.kpi-val.red { color: #f85149; }
-.kpi-val.amber { color: #e3a23a; }
-.kpi-val.green { color: #3fb950; }
-.kpi-lbl { font-size: 10px; color: #4f5b6e; margin-top: 1px; }
+.kpi-val.red { color: var(--col-err); }
+.kpi-val.amber { color: var(--col-warn); }
+.kpi-val.green { color: var(--col-ok); }
+.kpi-lbl { font-size: 10px; color: var(--tx-3); margin-top: 1px; }
 
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .btn-theme {
-  background: transparent; border: 1px solid #252b36; color: #8896aa;
+  background: transparent; border: 1px solid var(--bd); color: var(--tx-2);
   padding: 4px 9px; border-radius: 6px; cursor: pointer; font-size: 13px;
   transition: all .15s;
 }
-.btn-theme:hover { background: #1e2330; }
+.btn-theme:hover { background: var(--bg-hover); }
 .live-pill {
   display: flex; align-items: center; gap: 5px;
-  background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.25);
-  padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 600; color: #3fb950;
+  background: var(--col-ok-bg); border: 1px solid rgba(63,185,80,.25);
+  padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 600; color: var(--col-ok);
 }
 .live-dot {
-  width: 5px; height: 5px; border-radius: 50%; background: #3fb950;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--col-ok);
   animation: pulse 1.5s ease-in-out infinite;
 }
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
 
 /* ── Body layout ─────────────────────────────────────────── */
 .body-area { display: flex; flex: 1; overflow: hidden; height: 100%; }

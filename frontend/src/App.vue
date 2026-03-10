@@ -11,19 +11,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
 import { useIncidentsStore } from '@/store/incidents';
-<<<<<<< HEAD
 import { useVipChannelsStore } from '@/store/vipChannels';
+import { useTheme } from '@/composables/useTheme';
 import AppHeader from '@/components/AppHeader.vue';
 import AlarmNotificationToast from '@/components/AlarmNotificationToast.vue';
 
 const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();
-=======
-import { useTheme } from '@/composables/useTheme';
-
-const store = useIncidentsStore();
 useTheme(); // restore saved theme on boot
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
 let pollTimer: ReturnType<typeof setInterval>;
 
 onMounted(() => {

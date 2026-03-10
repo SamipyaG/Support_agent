@@ -452,12 +452,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-<<<<<<< HEAD
-.detail-view { min-height: 100%; background: #0a0d11; }
-=======
 /* ── Layout ──────────────────────────────────────── */
-.detail-view { min-height: 100vh; background: var(--bg-base); color: var(--tx-1); }
->>>>>>> 18a4547af20a9be0b5a005fb9e9df2fb5bda617e
+.detail-view { min-height: 100%; background: var(--bg-base); color: var(--tx-1); }
 
 .detail-header {
   display: flex; align-items: center; gap: 12px;
