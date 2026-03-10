@@ -27,6 +27,9 @@
 
       <div class="topbar-right">
         <RedisPanel />
+        <button class="btn-theme" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+          {{ isDark ? '☀' : '🌙' }}
+        </button>
         <span class="live-pill"><span class="live-dot"></span>LIVE</span>
       </div>
     </header>
@@ -155,10 +158,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
+import { useTheme } from '@/composables/useTheme';
 import IncidentCard from '@/components/IncidentCard.vue';
 import RedisPanel from '@/components/RedisPanel.vue';
 
 const store = useIncidentsStore();
+const { isDark, toggle: toggleTheme } = useTheme();
 const router = useRouter();
 
 const manualUuid = ref('');
@@ -260,6 +265,12 @@ onUnmounted(() => clearInterval(pollInterval));
 .kpi-lbl { font-size: 10px; color: #4f5b6e; margin-top: 1px; }
 
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.btn-theme {
+  background: transparent; border: 1px solid #252b36; color: #8896aa;
+  padding: 4px 9px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  transition: all .15s;
+}
+.btn-theme:hover { background: #1e2330; }
 .live-pill {
   display: flex; align-items: center; gap: 5px;
   background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.25);
