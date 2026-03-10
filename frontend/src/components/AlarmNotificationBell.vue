@@ -106,18 +106,18 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: #1a1f2e;
-  border: 1px solid #252b36;
+  background: var(--bg-card);
+  border: 1px solid var(--bd);
   border-radius: 8px;
   cursor: pointer;
-  color: #718096;
+  color: var(--tx-2);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
 .bell-btn:hover {
-  color: #edf2f7;
-  border-color: #3a4256;
-  background: #21273a;
+  color: var(--tx-1);
+  border-color: var(--tx-3);
+  background: var(--bg-hover);
 }
 
 .bell-btn.ringing {
@@ -146,7 +146,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid #0a0d11;
+  border: 1.5px solid var(--bg-base);
   line-height: 1;
 }
 
@@ -166,10 +166,10 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   right: 0;
   width: 320px;
   max-height: 400px;
-  background: #141820;
-  border: 1px solid #252b36;
+  background: var(--bg-card);
+  border: 1px solid var(--bd);
   border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -181,7 +181,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #1e2330;
+  border-bottom: 1px solid var(--bd-sub);
   flex-shrink: 0;
 }
 
@@ -190,13 +190,13 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #8896aa;
+  color: var(--tx-2);
 }
 
 .mark-read-btn {
   background: none;
   border: none;
-  color: #4a90d9;
+  color: var(--accent);
   font-size: 11px;
   cursor: pointer;
   padding: 0;
@@ -204,7 +204,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 }
 
 .mark-read-btn:hover {
-  color: #74b0f4;
+  color: var(--tx-1);
 }
 
 .dropdown-list {
@@ -214,7 +214,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 
 .dropdown-list::-webkit-scrollbar { width: 4px; }
 .dropdown-list::-webkit-scrollbar-track { background: transparent; }
-.dropdown-list::-webkit-scrollbar-thumb { background: #252b36; border-radius: 2px; }
+.dropdown-list::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 2px; }
 
 /* ── Notification items ──────────────────────────────────── */
 .notif-item {
@@ -223,7 +223,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   gap: 10px;
   padding: 10px 14px;
   cursor: pointer;
-  border-bottom: 1px solid #1a1f2a;
+  border-bottom: 1px solid var(--bd-faint);
   transition: background 0.12s;
 }
 
@@ -232,15 +232,15 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 }
 
 .notif-item:hover {
-  background: #1a1f2e;
+  background: var(--bg-hover);
 }
 
 .notif-item.unread {
-  background: #161c2b;
+  background: var(--accent-bg);
 }
 
 .notif-item.unread:hover {
-  background: #1c2236;
+  background: var(--bg-hover);
 }
 
 .notif-item.vip {
@@ -256,7 +256,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 }
 
 .unread-dot.visible {
-  background: #4a90d9;
+  background: var(--accent);
 }
 
 .notif-item-body {
@@ -267,7 +267,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 .notif-item-channel {
   font-size: 12px;
   font-weight: 600;
-  color: #edf2f7;
+  color: var(--tx-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -275,7 +275,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 }
 
 .notif-item.unread .notif-item-channel {
-  color: #fff;
+  color: var(--tx-1);
 }
 
 .notif-item-meta {
@@ -286,15 +286,15 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 
 .notif-item-state {
   font-size: 10px;
-  color: #a0aec0;
-  background: #ffffff10;
+  color: var(--tx-2);
+  background: var(--bd-faint);
   padding: 1px 5px;
   border-radius: 3px;
 }
 
 .notif-item-time {
   font-size: 10px;
-  color: #4f5b6e;
+  color: var(--tx-3);
 }
 
 .notif-item-vip {
@@ -311,7 +311,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   padding: 24px 14px;
   text-align: center;
   font-size: 12px;
-  color: #4f5b6e;
+  color: var(--tx-3);
 }
 
 /* ── Dropdown transition ─────────────────────────────────── */
