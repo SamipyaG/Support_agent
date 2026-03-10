@@ -1,12 +1,14 @@
 <template>
   <div class="app">
     <router-view />
+    <AlarmNotificationToast />
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
 import { useIncidentsStore } from '@/store/incidents';
+import AlarmNotificationToast from '@/components/AlarmNotificationToast.vue';
 
 const store = useIncidentsStore();
 let pollTimer: ReturnType<typeof setInterval>;

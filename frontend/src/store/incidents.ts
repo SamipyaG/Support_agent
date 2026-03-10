@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import api from '@/api/axios';
+import { useNotificationsStore } from '@/store/notifications';
 
 export interface Incident {
   _id: string;
@@ -112,6 +113,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
   const pendingApprovalId = ref<string | null>(null);
 
   const TERMINAL_STATES = ['RESOLVED', 'CLOSED', 'FAILED'];
+  const hasInitialized = ref(false);
 
   // One card per dsUuid — highest-priority state wins
   const deduplicatedIncidents = computed(() => deduplicateByUuid(incidents.value));
@@ -159,6 +161,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
       incidents.value = newList;
       total.value = res.data.total;
       currentPage.value = page;
+      hasInitialized.value = true;
     } catch (err) {
       error.value = (err as Error).message;
     } finally {
@@ -199,6 +202,22 @@ export const useIncidentsStore = defineStore('incidents', () => {
   async function pollActiveIncidents(): Promise<void> {
     const res = await api.get('/incidents/filter/active');
     const active: Incident[] = res.data.incidents;
+
+    if (hasInitialized.value) {
+      const notifications = useNotificationsStore();
+      const knownIds = new Set(incidents.value.map((i) => i._id));
+      active.forEach((inc) => {
+        if (!knownIds.has(inc._id) && !TERMINAL_STATES.includes(inc.state)) {
+          notifications.push({
+            id: inc._id,
+            channelName: inc.channelName,
+            state: inc.state,
+            createdAt: inc.createdAt,
+            isVip: inc.isVip,
+          });
+        }
+      });
+    }
 
     // Update existing or add new
     active.forEach((updated) => {
