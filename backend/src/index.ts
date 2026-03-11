@@ -56,7 +56,9 @@ async function bootstrap() {
     isPolling = true;
     try {
       const alarms = await hubMonitor.getActiveAlarms();
-      await managerAgent.processAlarms(alarms);
+      // closeStale: true — close any open incident whose alarm is no longer
+      // present in Hub Monitor (reviewed, cleared, or resolved by a human).
+      await managerAgent.processAlarms(alarms, { closeStale: true });
     } catch (err) {
       logger.error('[Bootstrap] Poll cycle failed', { err: String(err) });
     } finally {
