@@ -19,8 +19,11 @@ const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();
 let pollTimer: ReturnType<typeof setInterval>;
 
-onMounted(() => {
-  store.fetchIncidents();
+onMounted(async () => {
+  await store.fetchIncidents();
+  // Immediately sync the active-only view so stale/closed alarms are removed
+  // from the list without waiting for the first 20s poll tick.
+  await store.pollActiveIncidents();
   vipStore.fetchVipChannels();
   pollTimer = setInterval(() => store.pollActiveIncidents(), 20000);
 });
