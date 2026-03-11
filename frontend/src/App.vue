@@ -22,7 +22,7 @@ let pollTimer: ReturnType<typeof setInterval>;
 onMounted(() => {
   store.fetchIncidents();
   vipStore.fetchVipChannels();
-  pollTimer = setInterval(() => store.pollActiveIncidents(), 10000);
+  pollTimer = setInterval(() => store.pollActiveIncidents(), 20000);
 });
 
 onUnmounted(() => {

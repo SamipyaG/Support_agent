@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
@@ -193,14 +193,9 @@ async function triggerManual(): Promise<void> {
   }
 }
 
-let pollInterval: ReturnType<typeof setInterval>;
-
 onMounted(() => {
   store.fetchIncidents();
-  pollInterval = setInterval(() => store.fetchIncidents(store.currentPage), 10_000);
 });
-
-onUnmounted(() => clearInterval(pollInterval));
 </script>
 
 <style scoped>

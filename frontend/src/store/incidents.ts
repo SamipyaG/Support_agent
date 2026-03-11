@@ -104,7 +104,6 @@ function deduplicateByUuid(list: Incident[]): Incident[] {
 export const useIncidentsStore = defineStore('incidents', () => {
   const incidents = ref<Incident[]>([]);
   const alarmHistory = ref<Incident[]>([]);
-  const trackedActiveIds = ref<Set<string>>(new Set());
   const selectedIncident = ref<IncidentDetail | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -125,30 +124,6 @@ export const useIncidentsStore = defineStore('incidents', () => {
 
   const vipIncidents = computed(() => deduplicatedIncidents.value.filter((i) => i.isVip));
 
-  /**
-   * Move incidents to history ONLY when their state transitions to terminal
-   * (alarm went OFF / resolved). Incidents that merely vanish from pagination
-   * are NOT moved to history.
-   */
-  function _syncHistory(newIncidents: Incident[]): void {
-    const newById = new Map(newIncidents.map((i) => [i._id, i]));
-    const historyIds = new Set(alarmHistory.value.map((i) => i._id));
-
-    trackedActiveIds.value.forEach((id) => {
-      if (historyIds.has(id)) return; // already recorded
-      const updated = newById.get(id);
-      // Only add to history when the state explicitly became terminal (alarm went OFF)
-      if (updated && TERMINAL_STATES.includes(updated.state)) {
-        alarmHistory.value.unshift(updated);
-      }
-    });
-
-    // Update tracked set to current non-terminal incidents
-    trackedActiveIds.value = new Set(
-      newIncidents.filter((i) => !TERMINAL_STATES.includes(i.state)).map((i) => i._id),
-    );
-  }
-
   async function fetchIncidents(page = 1, state?: string): Promise<void> {
     loading.value = true;
     error.value = null;
@@ -156,9 +131,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
       const params: Record<string, unknown> = { page, limit: 20 };
       if (state) params.state = state;
       const res = await api.get('/incidents', { params });
-      const newList: Incident[] = res.data.incidents;
-      _syncHistory(newList);
-      incidents.value = newList;
+      incidents.value = res.data.incidents;
       total.value = res.data.total;
       currentPage.value = page;
       hasInitialized.value = true;
@@ -199,39 +172,53 @@ export const useIncidentsStore = defineStore('incidents', () => {
     return res.data.incidentId;
   }
 
+  /**
+   * Called every 20 seconds.
+   * - Existing alarm  → keep (update in-place)
+   * - New alarm       → add to activeAlarms + notify
+   * - Missing alarm   → move to alarmHistory
+   */
   async function pollActiveIncidents(): Promise<void> {
-    const res = await api.get('/incidents/filter/active');
-    const active: Incident[] = res.data.incidents;
+    try {
+      const res = await api.get('/incidents/filter/active');
+      const fetched: Incident[] = res.data.incidents;
+      const fetchedIds = new Set(fetched.map((i) => i._id));
+      const historyIds = new Set(alarmHistory.value.map((i) => i._id));
 
-    if (hasInitialized.value) {
-      const notifications = useNotificationsStore();
-      const knownIds = new Set(incidents.value.map((i) => i._id));
-      active.forEach((inc) => {
-        if (!knownIds.has(inc._id) && !TERMINAL_STATES.includes(inc.state)) {
-          notifications.push({
-            id: inc._id,
-            channelName: inc.channelName,
-            state: inc.state,
-            createdAt: inc.createdAt,
-            isVip: inc.isVip,
-          });
+      // 1. Move disappeared alarms to history
+      incidents.value.forEach((existing) => {
+        if (!fetchedIds.has(existing._id) && !historyIds.has(existing._id)) {
+          alarmHistory.value.unshift(existing);
         }
       });
-    }
 
-    // Update existing or add new
-    active.forEach((updated) => {
-      const idx = incidents.value.findIndex((i) => i._id === updated._id);
-      if (idx >= 0) {
-        incidents.value[idx] = updated;
-      } else {
-        incidents.value.unshift(updated);
+      // 2. Notify on new alarms (only after first successful poll)
+      if (hasInitialized.value) {
+        const notifications = useNotificationsStore();
+        const knownIds = new Set(incidents.value.map((i) => i._id));
+        fetched.forEach((inc) => {
+          if (!knownIds.has(inc._id)) {
+            notifications.push({
+              id: inc._id,
+              channelName: inc.channelName,
+              state: inc.state,
+              createdAt: inc.createdAt,
+              isVip: inc.isVip,
+            });
+          }
+        });
       }
-    });
 
-    // Check for pending approvals
-    const waiting = active.find((i) => i.state === 'WAITING_APPROVAL');
-    pendingApprovalId.value = waiting?._id || null;
+      // 3. Replace activeAlarms with the latest API response
+      incidents.value = fetched;
+      hasInitialized.value = true;
+
+      // 4. Track pending approvals
+      const waiting = fetched.find((i) => i.state === 'WAITING_APPROVAL');
+      pendingApprovalId.value = waiting?._id ?? null;
+    } catch {
+      // Silent — keep stale data on network error
+    }
   }
 
   function clearSelected(): void {

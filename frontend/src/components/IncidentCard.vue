@@ -70,10 +70,12 @@ const confidenceClass = computed(() => {
 
 const timeAgo = computed(() => {
   const diff = Date.now() - new Date(props.incident.createdAt).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
+  const secs = Math.floor(diff / 1000);
+  const mins = Math.floor(secs / 60);
+  const hours = Math.floor(mins / 60);
+  if (secs < 60) return `${secs}s ago`;
+  if (mins < 60) return `${mins}m ${secs % 60}s ago`;
+  return `${hours}h ${mins % 60}m ago`;
 });
 </script>
 
