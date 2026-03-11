@@ -6,7 +6,11 @@
 
     <div class="card-body">
       <div class="card-top">
-        <span class="channel-name">{{ incident.channelName }}</span>
+        <span
+          class="channel-name"
+          @contextmenu.prevent="copyUuid"
+          :title="`Right-click to copy ds_uuid`"
+        >{{ incident.channelName }}</span>
         <span v-if="incident.isVip" class="badge vip-badge">PRIORITIZED</span>
         <span class="badge state-badge" :class="`state-${incident.state.toLowerCase()}`">
           {{ incident.state.replace(/_/g, ' ') }}
@@ -14,17 +18,7 @@
         <span v-if="incident.state === 'WAITING_APPROVAL'" class="badge approval-badge">⏳ APPROVAL NEEDED</span>
       </div>
 
-      <div class="card-meta">
-        <span class="meta-item"><span class="meta-key">uuid</span>{{ incident.dsUuid }}</span>
-        <span class="meta-item"><span class="meta-key">cluster</span>{{ incident.clusterId }}</span>
-        <span class="meta-item"><span class="meta-key">redis</span>{{ incident.redisInstance }}</span>
-        <span class="meta-item"><span class="meta-key">type</span>{{ incident.streamType }}</span>
-        <span v-if="incident.errorCode" class="meta-item error-code">{{ incident.errorCode }}</span>
-      </div>
-
-      <div v-if="incident.statusLabel" class="status-label">
-        {{ incident.statusLabel }}
-      </div>
+      <div v-if="incident.errorCode" class="error-code">{{ incident.errorCode }}</div>
 
       <div v-if="incident.recommendedAction" class="card-action">
         <span class="action-label">Suggested:</span>
@@ -35,17 +29,26 @@
 
     <div class="card-right">
       <span class="card-time">{{ timeAgo }}</span>
-      <span class="reported-by">via {{ incident.reportedBy }}</span>
-      <span v-if="incident.jiraTicketKey" class="jira-key">{{ incident.jiraTicketKey }}</span>
     </div>
+
+    <div v-if="copied" class="copy-toast">Copied!</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Incident } from '@/store/incidents';
 
 const props = defineProps<{ incident: Incident }>();
+
+const copied = ref(false);
+
+function copyUuid(): void {
+  navigator.clipboard.writeText(props.incident.dsUuid).then(() => {
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 1500);
+  });
+}
 
 const stateDotClass = computed(() => {
   const map: Record<string, string> = {
@@ -83,7 +86,7 @@ const timeAgo = computed(() => {
 .incident-card {
   background: var(--bg-card); border: 1px solid var(--bd); border-radius: 8px;
   padding: 12px 16px; display: flex; align-items: flex-start; gap: 12px;
-  cursor: pointer; transition: border-color .15s, background .15s;
+  cursor: pointer; transition: border-color .15s, background .15s; position: relative;
 }
 .incident-card:hover { background: var(--bg-hover); border-color: var(--tx-4); }
 .incident-card.vip { border-left: 3px solid var(--col-err); }
@@ -103,7 +106,11 @@ const timeAgo = computed(() => {
 
 .card-body { flex: 1; }
 .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
-.channel-name { font-size: 13px; font-weight: 600; }
+.channel-name {
+  font-size: 13px; font-weight: 600;
+  cursor: context-menu;
+}
+.channel-name:hover { text-decoration: underline dotted var(--tx-3); }
 
 .badge {
   font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
@@ -117,12 +124,9 @@ const timeAgo = computed(() => {
 .state-escalated, .state-failed { color: #f85149; }
 .approval-badge { background: rgba(227,162,58,.15); color: #e3a23a; border: 1px solid rgba(227,162,58,.3); animation: blink 1s ease-in-out infinite; }
 
-.card-meta { display: flex; flex-wrap: wrap; gap: 12px; }
-.meta-item { font-family: monospace; font-size: 10px; color: var(--tx-3); }
-.meta-key { margin-right: 3px; color: var(--tx-4); }
-.error-code { color: var(--col-err); font-weight: 600; }
+.error-code { font-family: monospace; font-size: 11px; color: var(--col-err); font-weight: 600; margin-bottom: 4px; }
 
-.card-action { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.card-action { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .action-label { font-size: 10px; color: var(--tx-3); }
 .action-val { font-size: 11px; font-weight: 500; color: var(--accent); }
 .confidence { font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; }
@@ -130,10 +134,13 @@ const timeAgo = computed(() => {
 .conf-med  { background: rgba(227,162,58,.15); color: #e3a23a; }
 .conf-low  { background: rgba(248,81,73,.15); color: #f85149; }
 
-.status-label { font-size: 10px; color: var(--tx-2); margin-top: 4px; font-style: italic; }
-
 .card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
 .card-time { font-family: monospace; font-size: 11px; color: var(--tx-3); }
-.reported-by { font-size: 10px; color: var(--tx-4); }
-.jira-key { font-family: monospace; font-size: 10px; color: var(--accent); }
+
+.copy-toast {
+  position: absolute; bottom: 8px; right: 12px;
+  background: var(--col-ok); color: #fff;
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  pointer-events: none;
+}
 </style>

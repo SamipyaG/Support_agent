@@ -217,17 +217,6 @@
             </div>
           </div>
 
-          <!-- Approvals -->
-          <div v-if="store.selectedIncident.approvals?.length" class="info-card">
-            <div class="info-title">Approval History</div>
-            <div v-for="appr in store.selectedIncident.approvals" :key="appr._id" class="approval-row">
-              <span class="appr-action mono">{{ appr.proposedAction }}</span>
-              <span class="appr-decision" :class="`appr-${appr.decision}`">{{ appr.decision.toUpperCase() }}</span>
-              <span class="appr-by dim">{{ appr.decidedBy || (appr.autoExecuted ? 'auto' : 'pending') }}</span>
-              <span class="appr-time dim mono">{{ formatTime(appr.createdAt) }}</span>
-            </div>
-          </div>
-
           <!-- Escalations -->
           <div v-if="store.selectedIncident.escalations?.length" class="info-card">
             <div class="info-title">Escalations</div>
