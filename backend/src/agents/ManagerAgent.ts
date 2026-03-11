@@ -87,12 +87,33 @@ export class ManagerAgent {
   // ENTRY POINT — called from index.ts polling loop
   // ═══════════════════════════════════════════════════════════
 
-  async processAlarms(alarms: AlarmData[]): Promise<void> {
+  async processAlarms(alarms: AlarmData[], opts?: { closeStale?: boolean }): Promise<void> {
+    logger.info(`[Manager] Processing ${alarms.length} alarms`);
+
+    // ── Stale incident detection ──────────────────────────────────────────────
+    // Only run during full Hub Monitor polls (not manual triggers).
+    // alarms contains ALL currently-active alarm dsUuids from Hub Monitor
+    // (including review=true ones).  Any open incident whose dsUuid is NOT in
+    // this set means Hub Monitor has closed/reviewed that alarm — close it here.
+    if (opts?.closeStale) {
+      const activeUuids = new Set(alarms.map((a) => a.dsUuid));
+      const { incidents: openIncidents } = store.getAllIncidents({
+        state: ['NEW', 'ANALYZING', 'WAITING_APPROVAL', 'EXECUTING_ACTION', 'MONITORING', 'ESCALATED'],
+      });
+      for (const incident of openIncidents) {
+        if (!activeUuids.has(incident.dsUuid)) {
+          logger.info(
+            `[Manager] Incident ${incident._id} (${incident.channelName}) has no active alarm in Hub Monitor — closing`,
+          );
+          await this.closeIncident(incident, 'Alarm cleared or reviewed in Hub Monitor');
+        }
+      }
+    }
+
     if (alarms.length === 0) {
       logger.info('[Manager] No alarms in this poll cycle');
       return;
     }
-    logger.info(`[Manager] Processing ${alarms.length} alarms`);
 
     // Skip alarms already under manual review
     const reviewSkipped = alarms.filter((a) => a.review);

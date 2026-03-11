@@ -256,9 +256,13 @@ export class HubMonitorTool {
         process.env.HUB_ALARMS_PATH || '/sendalarms/status/alarms',
         { params: { reviewed: false } },
       );
-      const all = res.data.map((raw) => this.mapAlarm(raw));
-      const alarms = all.filter((a) => !a.review);
-      logger.info(`[HubMonitor] Got ${alarms.length} actionable alarms (${all.length - alarms.length} skipped — under review)`);
+      // Return ALL alarms (including review=true ones) so callers can detect
+      // which dsUuids are still active in Hub Monitor.  The review filtering
+      // is done in processAlarms() which needs the full set for stale-incident
+      // detection.
+      const alarms = res.data.map((raw) => this.mapAlarm(raw));
+      const reviewCount = alarms.filter((a) => a.review).length;
+      logger.info(`[HubMonitor] Got ${alarms.length} alarms (${reviewCount} under manual review, ${alarms.length - reviewCount} actionable)`);
       return alarms;
     }, 'getActiveAlarms');
   }
