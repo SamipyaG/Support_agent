@@ -55,6 +55,29 @@ onUnmounted(() => {
   --shadow:     0 8px 24px rgba(0,0,0,.55);
 }
 
+html.light {
+  --bg-base:    #f0f2f5;
+  --bg-card:    #ffffff;
+  --bg-deep:    #e8eaed;
+  --bg-hover:   #e8eaed;
+  --bd:         #d0d7e2;
+  --bd-sub:     #dce1ea;
+  --bd-faint:   #e4e8f0;
+  --tx-1:       #111318;
+  --tx-2:       #4a5568;
+  --tx-3:       #718096;
+  --tx-4:       #a0aec0;
+  --accent:     #2b7dd4;
+  --accent-bg:  rgba(43,125,212,.1);
+  --col-ok:         #2d9b3f;
+  --col-ok-bg:      rgba(45,155,63,.12);
+  --col-warn:       #c47d10;
+  --col-warn-bg:    rgba(196,125,16,.12);
+  --col-err:        #d93025;
+  --col-err-bg:     rgba(217,48,37,.12);
+  --shadow:     0 8px 24px rgba(0,0,0,.12);
+}
+
 /* ── Reset ───────────────────────────────────────── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }

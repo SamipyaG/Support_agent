@@ -27,12 +27,16 @@
       <RedisPanel />
       <AlarmNotificationBell />
       <span class="live-pill"><span class="live-dot"></span>LIVE</span>
+      <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+        <span v-if="isDark">☀</span>
+        <span v-else>☾</span>
+      </button>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
 import RedisPanel from '@/components/RedisPanel.vue';
@@ -47,13 +51,33 @@ const waitingApprovals = computed(
 const vipIncidentCount = computed(
   () => store.activeIncidents.filter((i) => vipStore.isVipChannel(i.channelName)).length,
 );
+
+const isDark = ref(!document.documentElement.classList.contains('light'));
+
+function toggleTheme() {
+  isDark.value = !isDark.value;
+  if (isDark.value) {
+    document.documentElement.classList.remove('light');
+    localStorage.setItem('theme', 'dark');
+  } else {
+    document.documentElement.classList.add('light');
+    localStorage.setItem('theme', 'light');
+  }
+}
+
+// Apply saved preference on load
+const saved = localStorage.getItem('theme');
+if (saved === 'light') {
+  document.documentElement.classList.add('light');
+  isDark.value = false;
+}
 </script>
 
 <style scoped>
 .app-header {
   height: 52px;
-  background: #111318;
-  border-bottom: 1px solid #252b36;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--bd);
   display: flex;
   align-items: center;
   padding: 0 20px;
@@ -92,5 +116,17 @@ const vipIncidentCount = computed(
 .live-dot {
   width: 5px; height: 5px; border-radius: 50%; background: #3fb950;
   animation: pulse 1.5s ease-in-out infinite;
+}
+
+.theme-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: transparent; border: 1px solid var(--bd);
+  color: var(--tx-2); font-size: 13px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  background: var(--bg-hover); border-color: var(--tx-3); color: var(--tx-1);
 }
 </style>

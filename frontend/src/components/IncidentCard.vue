@@ -79,13 +79,13 @@ const timeAgo = computed(() => {
 
 <style scoped>
 .incident-card {
-  background: #111318; border: 1px solid #252b36; border-radius: 8px;
+  background: var(--bg-card); border: 1px solid var(--bd); border-radius: 8px;
   padding: 12px 16px; display: flex; align-items: flex-start; gap: 12px;
   cursor: pointer; transition: border-color .15s, background .15s;
 }
-.incident-card:hover { background: #161b24; border-color: #2e3545; }
-.incident-card.vip { border-left: 3px solid #f85149; }
-.incident-card.awaiting-approval { border-color: rgba(227,162,58,.5); background: rgba(36,26,8,.3); }
+.incident-card:hover { background: var(--bg-hover); border-color: var(--tx-4); }
+.incident-card.vip { border-left: 3px solid var(--col-err); }
+.incident-card.awaiting-approval { border-color: rgba(227,162,58,.5); }
 
 .card-left { padding-top: 2px; }
 .state-dot {
@@ -108,7 +108,7 @@ const timeAgo = computed(() => {
   text-transform: uppercase; letter-spacing: .06em;
 }
 .vip-badge { background: rgba(248,81,73,.15); color: #f85149; border: 1px solid rgba(248,81,73,.3); }
-.state-badge { background: #1e2330; color: #8896aa; }
+.state-badge { background: var(--bd-sub); color: var(--tx-2); }
 .state-analyzing { color: #e3a23a; }
 .state-waiting_approval { background: rgba(227,162,58,.15); color: #e3a23a; border: 1px solid rgba(227,162,58,.3); }
 .state-resolved, .state-closed { color: #3fb950; }
@@ -116,22 +116,22 @@ const timeAgo = computed(() => {
 .approval-badge { background: rgba(227,162,58,.15); color: #e3a23a; border: 1px solid rgba(227,162,58,.3); animation: blink 1s ease-in-out infinite; }
 
 .card-meta { display: flex; flex-wrap: wrap; gap: 12px; }
-.meta-item { font-family: monospace; font-size: 10px; color: #4f5b6e; }
-.meta-key { margin-right: 3px; color: #2e3545; }
-.error-code { color: #f85149; font-weight: 600; }
+.meta-item { font-family: monospace; font-size: 10px; color: var(--tx-3); }
+.meta-key { margin-right: 3px; color: var(--tx-4); }
+.error-code { color: var(--col-err); font-weight: 600; }
 
 .card-action { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
-.action-label { font-size: 10px; color: #4f5b6e; }
-.action-val { font-size: 11px; font-weight: 500; color: #4d9de0; }
+.action-label { font-size: 10px; color: var(--tx-3); }
+.action-val { font-size: 11px; font-weight: 500; color: var(--accent); }
 .confidence { font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; }
 .conf-high { background: rgba(63,185,80,.15); color: #3fb950; }
 .conf-med  { background: rgba(227,162,58,.15); color: #e3a23a; }
 .conf-low  { background: rgba(248,81,73,.15); color: #f85149; }
 
-.status-label { font-size: 10px; color: #8896aa; margin-top: 4px; font-style: italic; }
+.status-label { font-size: 10px; color: var(--tx-2); margin-top: 4px; font-style: italic; }
 
 .card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
-.card-time { font-family: monospace; font-size: 11px; color: #4f5b6e; }
-.reported-by { font-size: 10px; color: #2e3545; }
-.jira-key { font-family: monospace; font-size: 10px; color: #4d9de0; }
+.card-time { font-family: monospace; font-size: 11px; color: var(--tx-3); }
+.reported-by { font-size: 10px; color: var(--tx-4); }
+.jira-key { font-family: monospace; font-size: 10px; color: var(--accent); }
 </style>
