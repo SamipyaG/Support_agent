@@ -65,6 +65,34 @@ export interface ActionHistoryEntry {
   approvedBy: string;
 }
 
+// ─── Timeline ──────────────────────────────────────────────────────────────────
+// Grouped timeline entries. Consecutive events with the same step+action+details
+// are merged: lastSeenAt and count update instead of adding a new row.
+
+export type TimelineStep =
+  | 'Alarm'
+  | 'Analysis'
+  | 'Resource Check'
+  | 'Recovery'
+  | 'Monitoring'
+  | 'Approval'
+  | 'Escalation'
+  | 'Notification';
+
+export type TimelineTrigger = 'System' | 'Agent' | 'Manual';
+
+export interface TimelineEntry {
+  id: string;
+  step: TimelineStep;
+  trigger: TimelineTrigger;
+  action: string;
+  details: string;
+  startedAt: Date;
+  lastSeenAt: Date;
+  count: number;          // how many times this identical event was observed
+  incidentTimeMs: number; // ms from incident.createdAt to first occurrence
+}
+
 export interface Incident {
   _id: string;                    // Auto-generated UUID
   dsUuid: string;
@@ -88,6 +116,7 @@ export interface Incident {
   resourceAnalysis: Record<string, unknown>;
   playerAnalysis: Record<string, unknown>;
   actionHistory: ActionHistoryEntry[];
+  timeline: TimelineEntry[];       // grouped event timeline (auto-deduplicates repeats)
   restartAttempts: number;
   maxRestartAttempts: number;
   statusLabel?: string;
@@ -222,6 +251,53 @@ class InMemoryStore {
     this.incidents.set(id, updated);
     this.persist();
     return updated;
+  }
+
+  /**
+   * Push an event onto the incident's timeline.
+   * Grouping rule: search the ENTIRE timeline for an entry with the same
+   * step + action + details. If found, extend it (update lastSeenAt, increment
+   * count) instead of adding a new row — even if it's not the last entry.
+   * This collapses repeated events from re-investigation cycles and polling.
+   */
+  pushTimelineEvent(
+    incidentId: string,
+    event: { step: TimelineStep; trigger: TimelineTrigger; action: string; details: string; startedAt?: Date },
+  ): void {
+    const incident = this.incidents.get(incidentId);
+    if (!incident) return;
+
+    const now = event.startedAt ?? new Date();
+    const incidentTimeMs = Math.max(0, now.getTime() - incident.createdAt.getTime());
+
+    if (!Array.isArray(incident.timeline)) incident.timeline = [];
+    const tl = incident.timeline;
+
+    // Search entire timeline for a matching entry (not just the last one)
+    const existing = tl.find(
+      (e) => e.step === event.step && e.action === event.action && e.details === event.details,
+    );
+
+    if (existing) {
+      existing.lastSeenAt = now;
+      existing.count++;
+    } else {
+      tl.push({
+        id: randomUUID(),
+        step: event.step,
+        trigger: event.trigger,
+        action: event.action,
+        details: event.details,
+        startedAt: now,
+        lastSeenAt: now,
+        count: 1,
+        incidentTimeMs,
+      });
+    }
+
+    incident.updatedAt = new Date();
+    this.incidents.set(incidentId, incident);
+    this.persist();
   }
 
   /**
@@ -585,13 +661,23 @@ class InMemoryStore {
         (result as Record<string, unknown>)[field] = new Date(result[field] as string);
       }
     }
-    // Also restore dates inside actionHistory array
+    // Restore dates inside actionHistory array
     if (Array.isArray((result as Record<string, unknown>).actionHistory)) {
       (result as Record<string, unknown>).actionHistory = (
         (result as Record<string, unknown>).actionHistory as ActionHistoryEntry[]
       ).map((entry) => ({
         ...entry,
         executedAt: new Date(entry.executedAt),
+      }));
+    }
+    // Restore dates inside timeline array
+    if (Array.isArray((result as Record<string, unknown>).timeline)) {
+      (result as Record<string, unknown>).timeline = (
+        (result as Record<string, unknown>).timeline as TimelineEntry[]
+      ).map((entry) => ({
+        ...entry,
+        startedAt: new Date(entry.startedAt),
+        lastSeenAt: new Date(entry.lastSeenAt),
       }));
     }
     return result;

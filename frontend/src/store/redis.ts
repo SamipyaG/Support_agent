@@ -4,6 +4,7 @@ import api from '@/api/axios';
 
 export interface RedisInstance {
   instanceName: string;
+  role?: string;
   isHealthy: boolean;
   usedMemory: string;
   maxMemory: string;
