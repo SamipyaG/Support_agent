@@ -151,25 +151,20 @@ const filterTabs = [
 ];
 
 const filteredIncidents = computed(() => {
-  if (activeFilter.value === 'all') return store.deduplicatedIncidents;
+  if (activeFilter.value === 'all') return store.activeIncidents;
   if (activeFilter.value === 'active') return store.activeIncidents;
   if (activeFilter.value === 'vip') return vipIncidents.value;
-  return store.deduplicatedIncidents.filter((i) => i.state === activeFilter.value);
+  return store.activeIncidents.filter((i) => i.state === activeFilter.value);
 });
 
 const totalPages = computed(() => Math.ceil(store.total / 20));
 
 function setFilter(value: string): void {
   activeFilter.value = value;
-  if (!['all', 'active', 'vip'].includes(value)) {
-    store.fetchIncidents(1, value);
-  } else {
-    store.fetchIncidents(1);
-  }
 }
 
 function loadPage(page: number): void {
-  store.fetchIncidents(page);
+  store.pollActiveIncidents();
 }
 
 function goToDetail(id: string): void {
@@ -194,7 +189,10 @@ async function triggerManual(): Promise<void> {
 }
 
 onMounted(() => {
-  store.fetchIncidents();
+  // Refresh active-only data when the view mounts (e.g. user navigates back).
+  // Never call fetchIncidents() here — that loads all states (including CLOSED)
+  // and causes terminal-state incidents to flash in the active alarm list.
+  store.pollActiveIncidents();
 });
 </script>
 
