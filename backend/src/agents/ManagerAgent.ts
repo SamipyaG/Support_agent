@@ -193,10 +193,12 @@ export class ManagerAgent {
       resolvedAt: new Date(),
     };
 
+    let sourceIncidentId: string;
     if (existingIncident) {
       store.updateIncident(existingIncident._id, fields);
+      sourceIncidentId = existingIncident._id;
     } else {
-      store.createIncident({
+      const created = store.createIncident({
         dsUuid: alarm.dsUuid,
         channelName: alarm.channelName,
         redisInstance: details.redisKey,
@@ -217,13 +219,23 @@ export class ManagerAgent {
         resourceAnalysis: {},
         playerAnalysis: {},
         actionHistory: [],
+        timeline: [],
         restartAttempts: 0,
         maxRestartAttempts: 2,
         statusLabel: 'Source is down — customer notified',
         state: 'RESOLVED',
         resolvedAt: new Date(),
       });
+      sourceIncidentId = created._id;
     }
+    store.pushTimelineEvent(sourceIncidentId, {
+      step: 'Alarm', trigger: 'System', action: 'Source Issue Detected',
+      details: `Multiple channels on same source URL — G-Mana healthy, source is down`,
+    });
+    store.pushTimelineEvent(sourceIncidentId, {
+      step: 'Notification', trigger: 'Agent', action: 'Customer Notified',
+      details: `Source stream down for ${alarm.channelName} — customer alerted, no restart`,
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -289,7 +301,14 @@ export class ManagerAgent {
     // Scenario 1: Below repeat threshold — watch and wait
     if (recentCount < repeatThreshold) {
       const label = `Watching — wait ${waitingTimeSeconds}s before acting (${recentCount}/${repeatThreshold} alarms)`;
-      await this.createOrUpdateTrackingIncident(alarm, existingIncident, label);
+      const incidentId = await this.createOrUpdateTrackingIncident(alarm, existingIncident, label);
+      // Push stable detail so repeated polls collapse into one row
+      if (existingIncident) {
+        store.pushTimelineEvent(incidentId, {
+          step: 'Alarm', trigger: 'System', action: 'Alarm Watching',
+          details: 'Below alarm threshold — waiting for repeat pattern',
+        });
+      }
       logger.info(`[Manager] ${alarm.channelName}: Below threshold, watching...`);
       return;
     }
@@ -298,7 +317,13 @@ export class ManagerAgent {
     if (alarmAgeSeconds < waitingTimeSeconds) {
       const remaining = Math.round(waitingTimeSeconds - alarmAgeSeconds);
       const label = `Threshold met — waiting ${remaining}s more before action`;
-      await this.createOrUpdateTrackingIncident(alarm, existingIncident, label);
+      const incidentId = await this.createOrUpdateTrackingIncident(alarm, existingIncident, label);
+      if (existingIncident) {
+        store.pushTimelineEvent(incidentId, {
+          step: 'Alarm', trigger: 'System', action: 'Alarm Watching',
+          details: 'Threshold met — waiting before investigation',
+        });
+      }
       logger.info(`[Manager] ${alarm.channelName}: Waiting ${remaining}s more`);
       return;
     }
@@ -316,7 +341,7 @@ export class ManagerAgent {
     alarm: AlarmData,
     existingIncident: Incident | null,
     statusLabel: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const [details, streamUrls] = await Promise.all([
       this.hubMonitor.getStreamDetails(alarm.dsUuid).catch(() => ({ clusterName: '', redisKey: '' })),
       this.hubMonitor.getStreamUrls(alarm.dsUuid).catch(() => null),
@@ -333,9 +358,9 @@ export class ManagerAgent {
           gManaPlayerUrl: streamUrls.gManaPlayerUrl,
         }),
       });
-      return;
+      return existingIncident._id;
     }
-    store.createIncident({
+    const created = store.createIncident({
       dsUuid: alarm.dsUuid,
       channelName: streamUrls?.channelName || alarm.channelName,
       clusterId: details.clusterName,
@@ -357,10 +382,16 @@ export class ManagerAgent {
       resourceAnalysis: {},
       playerAnalysis: {},
       actionHistory: [],
+      timeline: [],
       restartAttempts: 0,
       maxRestartAttempts: 2,
       statusLabel,
     });
+    store.pushTimelineEvent(created._id, {
+      step: 'Alarm', trigger: 'System', action: 'Alarm Detected',
+      details: `${alarm.errorType || 'stream error'} — watching`,
+    });
+    return created._id;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -468,9 +499,22 @@ export class ManagerAgent {
       resourceAnalysis: {},
       playerAnalysis: {},
       actionHistory: [],
+      timeline: [],
       restartAttempts: 0,
       maxRestartAttempts: 2,
       statusLabel: 'Investigating — G-Mana issue confirmed',
+    });
+
+    if (!existingIncident) {
+      // Incident was created fresh here — push the initial alarm event
+      store.pushTimelineEvent(incident._id, {
+        step: 'Alarm', trigger: 'System', action: 'Alarm Detected',
+        details: `${alarm.errorType || 'stream error'} on ${alarm.channelName} — G-Mana issue confirmed`,
+      });
+    }
+    store.pushTimelineEvent(incident._id, {
+      step: 'Analysis', trigger: 'Agent', action: 'Investigation Started',
+      details: 'Fetching stream URLs and infrastructure details',
     });
 
     store.updateIncident(incident._id, {
@@ -497,6 +541,13 @@ export class ManagerAgent {
         : {},
     });
 
+    store.pushTimelineEvent(incident._id, {
+      step: 'Resource Check', trigger: 'Agent', action: 'Infrastructure Analysis',
+      details: resourcesReport
+        ? `${resourcesReport.affectedComponent || 'Unknown'}: ${resourcesReport.resourceIssueType || 'no issue'} — confidence ${resourcesReport.confidenceScore || 0}%`
+        : 'Resource analysis unavailable',
+    });
+
     // ── STEP 3: Manager synthesizes with GPT-4o ───────────────────────────────
     logger.info(`[Manager] STEP 3: Synthesizing with GPT-4o`);
     const decision = await this.synthesizeReports(alarm, resourcesReport);
@@ -511,6 +562,11 @@ export class ManagerAgent {
       confidenceScore: decision.confidenceScore,
       explanation: decision.explanation,
       errorCode: decision.errorCode || alarm.errorType,
+    });
+
+    store.pushTimelineEvent(incident._id, {
+      step: 'Analysis', trigger: 'Agent', action: 'AI Decision',
+      details: `${decision.recommendedAction} recommended — confidence ${decision.confidenceScore}%`,
     });
 
     // ── STEP 4: Update alarm age info, then hand off to executeAction ──────────
@@ -650,6 +706,10 @@ export class ManagerAgent {
       recommendedAction: action,
       statusLabel: `Awaiting approval — ${action.replace(/_/g, ' ')}`,
     });
+    store.pushTimelineEvent(incident._id, {
+      step: 'Approval', trigger: 'System', action: `Approval Requested`,
+      details: `${action.replace(/_/g, ' ')} — waiting for human sign-off (timeout: ${approvalTimeoutSeconds}s)`,
+    });
 
     const approval = await this.approvalService.waitForApproval(
       incident._id,
@@ -665,6 +725,10 @@ export class ManagerAgent {
         explanation: `${action} rejected by ${approval.decidedBy}`,
         statusLabel: `Escalated — ${action} rejected by ${approval.decidedBy}`,
       });
+      store.pushTimelineEvent(incident._id, {
+        step: 'Approval', trigger: 'Manual', action: 'Approval Rejected',
+        details: `${action.replace(/_/g, ' ')} rejected by ${approval.decidedBy}`,
+      });
       return;
     }
 
@@ -674,6 +738,10 @@ export class ManagerAgent {
         state: 'ESCALATED',
         explanation: `${action} timed out waiting for approval — manual permission required`,
         statusLabel: `Escalated — ${action} approval timed out, manual intervention required`,
+      });
+      store.pushTimelineEvent(incident._id, {
+        step: 'Approval', trigger: 'System', action: 'Approval Timeout',
+        details: `${action.replace(/_/g, ' ')} — no response after ${approvalTimeoutSeconds}s`,
       });
       return;
     }
@@ -695,10 +763,18 @@ export class ManagerAgent {
             { action: 'RESTART_UH', executedAt: new Date(), result: result.message, approvedBy: approval.decidedBy || 'auto' },
           ],
         });
+        store.pushTimelineEvent(incident._id, {
+          step: 'Recovery', trigger: approval.decidedBy ? 'Manual' : 'System',
+          action: 'Restart UH', details: `User Handler restarted on ${clusterName} — ${result.message}`,
+        });
         await sleep(POST_RESTART_WAIT_MS);
         await this.recheckAfterAction(incident, alarm, streamUrls, 'RESTART_UH');
       } catch (err) {
         logger.error(`[Manager] RESTART_UH failed: ${String(err)}`);
+        store.pushTimelineEvent(incident._id, {
+          step: 'Recovery', trigger: 'System', action: 'Restart UH Failed',
+          details: String(err),
+        });
         await this.executeAction(
           store.updateIncident(incident._id, { restartAttempts: latest.restartAttempts + 1 })!,
           alarm,
@@ -718,10 +794,18 @@ export class ManagerAgent {
             { action: 'RESTART_CI', executedAt: new Date(), result: result.message, approvedBy: approval.decidedBy || 'auto' },
           ],
         });
+        store.pushTimelineEvent(incident._id, {
+          step: 'Recovery', trigger: approval.decidedBy ? 'Manual' : 'System',
+          action: 'Restart CI', details: `CueMana-In restarted on ${clusterName} — ${result.message}`,
+        });
         await sleep(POST_RESTART_WAIT_MS);
         await this.recheckAfterAction(incident, alarm, streamUrls, 'RESTART_CI');
       } catch (err) {
         logger.error(`[Manager] RESTART_CI failed: ${String(err)}`);
+        store.pushTimelineEvent(incident._id, {
+          step: 'Recovery', trigger: 'System', action: 'Restart CI Failed',
+          details: String(err),
+        });
         await this.escalate(latest, alarm);
       }
     }
@@ -750,6 +834,11 @@ export class ManagerAgent {
           logger.info(
             `[Manager] Alarm cleared after ${actionTaken} (check ${attempt}/${STABLE_CHECK_ATTEMPTS}) — resolved`,
           );
+          // Different details → new row (not grouped with "still active" checks)
+          store.pushTimelineEvent(incident._id, {
+            step: 'Monitoring', trigger: 'System', action: `Stream Check`,
+            details: `Alarm cleared — stream healthy after ${actionTaken.replace(/_/g, ' ')}`,
+          });
           await this.closeIncident(incident, `Resolved by ${actionTaken}`);
           return;
         }
@@ -757,6 +846,11 @@ export class ManagerAgent {
         logger.info(
           `[Manager] Alarm still active after ${actionTaken} (check ${attempt}/${STABLE_CHECK_ATTEMPTS})`,
         );
+        // Same step+action+details on every check → grouped into one expanding row
+        store.pushTimelineEvent(incident._id, {
+          step: 'Monitoring', trigger: 'System', action: `Stream Check`,
+          details: `Alarm still active after ${actionTaken.replace(/_/g, ' ')}`,
+        });
       } catch (err) {
         logger.warn(`[Manager] Recheck failed on attempt ${attempt}: ${String(err)}`);
       }
@@ -786,6 +880,10 @@ export class ManagerAgent {
         },
       ],
     });
+    store.pushTimelineEvent(incident._id, {
+      step: 'Escalation', trigger: 'System', action: 'Escalated to Manual',
+      details: 'All automatic restarts failed — manual intervention required',
+    });
     logger.warn(`[Manager] Manual intervention needed for ${alarm.channelName}`);
   }
 
@@ -795,6 +893,10 @@ export class ManagerAgent {
       resolvedAt: new Date(),
       closedAt: new Date(),
       statusLabel: `Closed — ${resolution}`,
+    });
+    store.pushTimelineEvent(incident._id, {
+      step: 'Monitoring', trigger: 'System', action: 'Incident Closed',
+      details: resolution,
     });
     store.upsertMemoryPattern({
       patternKey: `restart_success:${incident.dsUuid}:${incident.recommendedAction}`,

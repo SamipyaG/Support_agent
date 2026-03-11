@@ -170,35 +170,47 @@
             :cluster-id="store.selectedIncident.clusterId"
           />
 
-          <!-- Timeline Audit Table -->
+          <!-- Timeline Table -->
           <div class="info-card">
-            <div class="info-title">Incident Timeline</div>
-            <div class="audit-wrap">
+            <div class="info-title-row">
+              <span class="info-title">Incident Timeline</span>
+              <span v-if="incidentDuration" class="tl-duration-pill">Total: {{ incidentDuration }}</span>
+            </div>
+
+            <div v-if="!timelineRows.length" class="tl-empty">No timeline data yet.</div>
+            <div v-else class="audit-wrap">
               <table class="audit-table">
                 <thead>
                   <tr>
-                    <th>Time</th>
+                    <th>Time Range</th>
+                    <th>Duration</th>
                     <th>Step</th>
                     <th>Trigger</th>
                     <th>Action</th>
                     <th>Details</th>
-                    <th>Elapsed</th>
+                    <th>Elaspsed Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, i) in auditRows" :key="i">
-                    <td class="mono">{{ row.time }}</td>
-                    <td><span class="step-badge" :class="`step-${row.step.toLowerCase()}`">{{ row.step }}</span></td>
-                    <td><span class="trigger-badge" :class="`trig-${row.trigger.toLowerCase()}`">{{ row.trigger }}</span></td>
+                  <tr v-for="(row, i) in timelineRows" :key="i" :class="{ 'row-grouped': row.count > 1 }">
+                    <td class="mono time-cell">
+                      {{ row.timeDisplay }}
+                      <span v-if="row.count > 1" class="repeat-badge">×{{ row.count }}</span>
+                    </td>
+                    <td class="mono dim">{{ row.duration }}</td>
+                    <td>
+                      <span class="step-badge" :class="`step-${row.step.toLowerCase().replace(/\s+/g, '-')}`">
+                        {{ row.step }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="trigger-badge" :class="`trig-${row.trigger.toLowerCase()}`">
+                        {{ row.trigger }}
+                      </span>
+                    </td>
                     <td class="action-cell">{{ row.action }}</td>
                     <td class="details-cell">{{ row.details }}</td>
-                    <td class="mono elapsed-cell">{{ row.elapsed }}</td>
-                  </tr>
-                  <!-- Duration summary row -->
-                  <tr v-if="incidentDuration" class="summary-row">
-                    <td colspan="4"><strong>Incident Duration</strong></td>
-                    <td>From {{ formatTime(store.selectedIncident.createdAt) }} to {{ formatTime(store.selectedIncident.closedAt || store.selectedIncident.resolvedAt || new Date().toISOString()) }}</td>
-                    <td class="mono"><strong>{{ incidentDuration }}</strong></td>
+                    <td class="mono elapsed-cell">{{ row.incidentTime }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -314,16 +326,6 @@ const confClass = computed(() => {
   return 'conf-low';
 });
 
-interface AuditRow {
-  time: string;
-  step: string;
-  trigger: 'System' | 'Agent' | 'Manual';
-  action: string;
-  details: string;
-  elapsed: string;
-  raw: number;
-}
-
 function formatElapsed(ms: number): string {
   if (ms <= 0) return '0s';
   const totalSec = Math.round(ms / 1000);
@@ -336,70 +338,50 @@ function formatElapsed(ms: number): string {
   return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
 }
 
-function deriveTrigger(approvedBy: string, action: string): 'System' | 'Agent' | 'Manual' {
-  if (approvedBy === 'Manual') return 'Manual';
-  if (approvedBy === 'auto' || approvedBy === 'system') return action === 'ESCALATE' ? 'Agent' : 'System';
-  if (approvedBy && approvedBy.length > 0) return 'Manual';
-  return 'Agent';
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-const auditRows = computed((): AuditRow[] => {
-  if (!store.selectedIncident) return [];
-  const inc = store.selectedIncident;
-  const startMs = new Date(inc.createdAt).getTime();
-  const rows: AuditRow[] = [];
+interface TimelineRow {
+  timeDisplay: string;    // "10:01:20" or "10:01:20 → 10:30:00"
+  duration: string;       // duration of this event block
+  step: string;
+  trigger: string;
+  action: string;
+  details: string;
+  incidentTime: string;   // running total from alarm start
+  count: number;
+}
 
-  function row(ts: string | Date, step: string, trigger: AuditRow['trigger'], action: string, details: string): AuditRow {
-    const t = new Date(ts).getTime();
+const timelineRows = computed((): TimelineRow[] => {
+  const tl = store.selectedIncident?.timeline;
+  if (!tl?.length) return [];
+
+  const now = Date.now();
+  return tl.map((e, i) => {
+    const start = fmtTime(e.startedAt);
+    const isLast = i === tl.length - 1;
+    const nextStartMs = isLast ? now : new Date(tl[i + 1].startedAt).getTime();
+    const endMs = isLast ? now : nextStartMs;
+    const end = fmtTime(new Date(endMs).toISOString());
+    const durationMs = Math.max(0, nextStartMs - new Date(e.startedAt).getTime());
+
     return {
-      time: new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      step, trigger, action, details,
-      elapsed: formatElapsed(t - startMs),
-      raw: t,
+      timeDisplay: `${start} → ${end}`,
+      duration: formatElapsed(durationMs),
+      step: e.step,
+      trigger: e.trigger,
+      action: e.action,
+      details: e.details,
+      incidentTime: formatElapsed(e.incidentTimeMs),
+      count: e.count,
     };
-  }
-
-  // 1 — Alarm detected
-  rows.push(row(inc.createdAt, 'Alarm', 'System', 'Alarm Detected', `Received from ${inc.reportedBy} — ${inc.errorCode || 'stream issue'}`));
-
-  // 2 — Analysis started (if AI investigated)
-  if (inc.confidenceScore > 0 || (inc.resourceAnalysis as any)?.affectedComponent) {
-    rows.push(row(inc.createdAt, 'Analysis', 'Agent', 'Investigation Started', 'AI fetching pod logs, Redis health, and running GPT-4o synthesis'));
-  }
-
-  // 3 — Action history (agent restarts + manual restarts)
-  inc.actionHistory?.forEach((a: any) => {
-    const step = a.action === 'ESCALATE' ? 'Escalation' : a.action === 'NOTIFY_CUSTOMER' ? 'Notification' : 'Recovery';
-    const trigger = deriveTrigger(a.approvedBy || '', a.action);
-    const extra = a.approvedBy && a.approvedBy !== 'Manual' && a.approvedBy !== 'auto' && a.approvedBy !== 'system'
-      ? ` · Approved by: ${a.approvedBy}` : '';
-    rows.push(row(a.executedAt, step, trigger, a.action.replace(/_/g, ' '), `${a.result}${extra}`));
   });
-
-  // 4 — Approval decisions
-  inc.approvals?.forEach((appr: any) => {
-    if (appr.decision === 'pending') return;
-    const trigger: AuditRow['trigger'] = appr.decision === 'timeout' ? 'System' : 'Manual';
-    rows.push(row(appr.decidedAt || appr.createdAt, 'Approval', trigger,
-      `Approval ${appr.decision.toUpperCase()}`,
-      `${appr.proposedAction} — ${appr.decision} by ${appr.decidedBy || 'timeout'}`));
-  });
-
-  // 5 — Escalations
-  inc.escalations?.forEach((e: any) => {
-    rows.push(row(e.sentAt || e.createdAt, 'Escalation', 'Agent', 'Escalated', `${e.reason} → ${e.escalatedTo}`));
-  });
-
-  // 6 — Resolution
-  if (inc.resolvedAt) rows.push(row(inc.resolvedAt, 'Monitoring', 'System', 'Incident Resolved', 'Stream verified healthy by Hub Monitor'));
-  if (inc.closedAt) rows.push(row(inc.closedAt, 'Monitoring', 'System', 'Incident Closed', 'Closed — memory pattern recorded for future use'));
-
-  return rows.sort((a, b) => a.raw - b.raw);
 });
 
 const incidentDuration = computed((): string | null => {
   if (!store.selectedIncident) return null;
-  const end = store.selectedIncident.closedAt || store.selectedIncident.resolvedAt;
+  const end = (store.selectedIncident as any).closedAt || store.selectedIncident.resolvedAt;
   if (!end) return null;
   return formatElapsed(new Date(end).getTime() - new Date(store.selectedIncident.createdAt).getTime());
 });
@@ -525,6 +507,13 @@ onUnmounted(() => {
 /* ── Info card ───────────────────────────────────── */
 .info-card { background: var(--bg-card); border: 1px solid var(--bd); border-radius: 8px; padding: 14px; }
 .info-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--tx-3); margin-bottom: 12px; }
+.info-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.info-title-row .info-title { margin-bottom: 0; }
+.tl-duration-pill {
+  font-size: 10px; font-weight: 600; padding: 2px 8px;
+  background: var(--bd-sub); color: var(--tx-2); border-radius: 10px;
+}
+.tl-empty { font-size: 11px; color: var(--tx-3); padding: 8px 0; }
 .info-grid { display: grid; grid-template-columns: 100px 1fr; gap: 6px 12px; align-items: start; }
 .info-key { font-size: 11px; color: var(--tx-3); }
 .info-val { font-size: 12px; color: var(--tx-1); }
@@ -596,7 +585,7 @@ onUnmounted(() => {
 .btn-secondary:hover { background: var(--bd); color: var(--tx-1); }
 
 /* ── Audit table ─────────────────────────────────── */
-.audit-wrap { overflow-x: auto; }
+.audit-wrap { overflow-x: auto; overflow-y: auto; max-height: 380px; }
 .audit-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .audit-table th {
   text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--bd);
@@ -606,28 +595,39 @@ onUnmounted(() => {
 .audit-table tr:last-child td { border-bottom: none; }
 .audit-table tr:hover td { background: var(--bg-hover); }
 .action-cell { font-weight: 600; white-space: nowrap; }
-.details-cell { color: var(--tx-2); max-width: 240px; word-break: break-word; }
+.details-cell { color: var(--tx-2); max-width: 260px; word-break: break-word; }
 .elapsed-cell { color: var(--tx-3); white-space: nowrap; }
+.time-cell { white-space: nowrap; }
 
-/* Step badges — green / red / yellow / gray only */
+/* Grouped row highlight */
+.row-grouped td { background: rgba(77,157,224,.03); }
+.row-grouped:hover td { background: rgba(77,157,224,.07) !important; }
+
+/* Repeat count badge */
+.repeat-badge {
+  display: inline-block; margin-left: 5px;
+  font-size: 9px; font-weight: 700;
+  background: var(--accent-bg); color: var(--accent);
+  padding: 1px 5px; border-radius: 8px;
+  border: 1px solid rgba(77,157,224,.3);
+}
+
+/* Step badges */
 .step-badge { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
-.step-alarm      { background: var(--col-err-bg);  color: var(--col-err); }
-.step-analysis   { background: var(--bd-sub);       color: var(--tx-2); }
-.step-recovery   { background: var(--col-ok-bg);   color: var(--col-ok); }
-.step-monitoring { background: var(--col-ok-bg);   color: var(--col-ok); }
-.step-escalation { background: var(--col-err-bg);  color: var(--col-err); }
-.step-notification { background: var(--col-warn-bg); color: var(--col-warn); }
-.step-approval   { background: var(--col-ok-bg);   color: var(--col-ok); }
-.step-manual     { background: var(--col-warn-bg);  color: var(--col-warn); }
+.step-alarm           { background: var(--col-err-bg);  color: var(--col-err); }
+.step-analysis        { background: var(--bd-sub);       color: var(--tx-2); }
+.step-resource-check  { background: rgba(77,157,224,.12); color: var(--accent); }
+.step-recovery        { background: var(--col-ok-bg);   color: var(--col-ok); }
+.step-monitoring      { background: var(--col-ok-bg);   color: var(--col-ok); }
+.step-escalation      { background: var(--col-err-bg);  color: var(--col-err); }
+.step-notification    { background: var(--col-warn-bg); color: var(--col-warn); }
+.step-approval        { background: var(--col-warn-bg); color: var(--col-warn); }
 
-/* Trigger badges — gray / yellow only */
+/* Trigger badges */
 .trigger-badge { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
 .trig-system { background: var(--bd-sub); color: var(--tx-2); }
-.trig-agent  { background: var(--bd-sub); color: var(--tx-2); }
+.trig-agent  { background: rgba(77,157,224,.12); color: var(--accent); }
 .trig-manual { background: var(--col-warn-bg); color: var(--col-warn); }
-
-/* Summary row */
-.summary-row td { background: var(--bg-deep); border-top: 1px solid var(--bd); color: var(--tx-2); font-size: 11px; }
 
 /* ── Approvals / Escalations / Logs ──────────────── */
 .approval-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--bd-sub); }

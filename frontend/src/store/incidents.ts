@@ -33,6 +33,17 @@ export interface Incident {
     result: string;
     approvedBy?: string;
   }>;
+  timeline?: Array<{
+    id: string;
+    step: string;
+    trigger: string;
+    action: string;
+    details: string;
+    startedAt: string;
+    lastSeenAt: string;
+    count: number;
+    incidentTimeMs: number;
+  }>;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
