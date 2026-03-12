@@ -138,13 +138,19 @@
                 <div class="player-embed-label source">Source</div>
                 <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
                 <div v-else class="player-no-url">No source URL</div>
-                <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
+                <div class="player-bottom">
+                  <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
+                  <a v-if="store.selectedIncident.sourcePlayerUrl" :href="store.selectedIncident.sourcePlayerUrl" target="_blank" rel="noopener" class="player-open-btn source">▶ Open Source</a>
+                </div>
               </div>
               <div class="player-embed">
                 <div class="player-embed-label gmana">G-Mana</div>
                 <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
                 <div v-else class="player-no-url">No G-Mana URL</div>
-                <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
+                <div class="player-bottom">
+                  <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
+                  <a v-if="store.selectedIncident.gManaPlayerUrl" :href="store.selectedIncident.gManaPlayerUrl" target="_blank" rel="noopener" class="player-open-btn gmana">▶ Open G-MANA</a>
+                </div>
               </div>
             </div>
           </div>
@@ -557,7 +563,16 @@ onUnmounted(() => {
 .player-embed { display: flex; flex-direction: column; gap: 5px; }
 .player-embed-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tx-3); }
 .player-no-url { height: 180px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
-.player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
+.player-bottom { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; }
+.player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; flex: 1; }
+.player-open-btn {
+  display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;
+  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+  text-decoration: none; letter-spacing: .04em; transition: opacity .15s;
+}
+.player-open-btn:hover { opacity: .75; }
+.player-open-btn.gmana  { background: rgba(77,157,224,.15); color: #4d9de0; border: 1px solid rgba(77,157,224,.3); }
+.player-open-btn.source { background: rgba(227,162,58,.12);  color: #e3a23a; border: 1px solid rgba(227,162,58,.3); }
 
 /* ── Draft message ───────────────────────────────── */
 .draft-textarea {

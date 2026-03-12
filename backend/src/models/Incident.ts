@@ -63,6 +63,7 @@ export interface IIncident extends Document {
   clusterId: string;
   redisInstance: string;
   streamType: 'HLS' | 'DASH';
+  channelType: 'LIVE' | 'VOD';
   isVip: boolean;
   customerId: string;
   state: IncidentState;
@@ -99,6 +100,7 @@ const IncidentSchema = new Schema<IIncident>(
     clusterId:       { type: String, required: true },
     redisInstance:   { type: String, required: true },
     streamType:      { type: String, enum: ['HLS', 'DASH'], default: 'HLS' },
+    channelType:     { type: String, enum: ['LIVE', 'VOD'], default: 'LIVE' },
     isVip:           { type: Boolean, default: false },
     customerId:      { type: String, required: true },
 

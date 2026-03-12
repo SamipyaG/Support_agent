@@ -29,6 +29,9 @@
     </div>
 
     <div class="header-right">
+      <ClusterPanel label="Pending Pods" type="pending-pods" />
+      <ClusterPanel label="Components"   type="components" />
+      <ClusterPanel label="Coherency"    type="coherency" />
       <RedisPanel />
       <AlarmNotificationBell />
       <span class="live-pill"><span class="live-dot"></span>LIVE</span>
@@ -47,6 +50,7 @@ import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
 import RedisPanel from '@/components/RedisPanel.vue';
 import AlarmNotificationBell from '@/components/AlarmNotificationBell.vue';
+import ClusterPanel from '@/components/ClusterPanel.vue';
 
 const router = useRouter();
 const route  = useRoute();

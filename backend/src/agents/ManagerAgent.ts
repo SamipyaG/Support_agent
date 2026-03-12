@@ -225,6 +225,7 @@ export class ManagerAgent {
         redisInstance: details.redisKey,
         clusterId: details.clusterName,
         streamType: (streamUrls?.streamType as 'HLS' | 'DASH') || 'HLS',
+        channelType: ((streamUrls?.channelType || 'Live').toLowerCase().startsWith('v') ? 'VOD' : 'LIVE') as 'LIVE' | 'VOD',
         isVip: VIP_KEYWORDS.some((k) => alarm.channelName.toLowerCase().includes(k)),
         customerId: '',
         reportedBy: 'HubMonitor',
@@ -387,6 +388,7 @@ export class ManagerAgent {
       clusterId: details.clusterName,
       redisInstance: details.redisKey,
       streamType: (streamUrls?.streamType as 'HLS' | 'DASH') || 'HLS',
+      channelType: ((streamUrls?.channelType || 'Live').toLowerCase().startsWith('v') ? 'VOD' : 'LIVE') as 'LIVE' | 'VOD',
       isVip: false,
       customerId: '',
       state: 'NEW',
@@ -504,6 +506,7 @@ export class ManagerAgent {
       clusterId: clusterName,
       redisInstance: redisKey,
       streamType: streamUrls.streamType as 'HLS' | 'DASH',
+      channelType: (streamUrls.channelType.toLowerCase().startsWith('v') ? 'VOD' : 'LIVE') as 'LIVE' | 'VOD',
       isVip,
       customerId: streamUrls.customerName,
       state: 'NEW',
@@ -548,6 +551,7 @@ export class ManagerAgent {
       gManaPlayerUrl: streamUrls.gManaPlayerUrl,
       sourcePlayerUrl: streamUrls.sourcePlayerUrl,
       streamType: streamUrls.streamType as 'HLS' | 'DASH',
+      channelType: (streamUrls.channelType.toLowerCase().startsWith('v') ? 'VOD' : 'LIVE') as 'LIVE' | 'VOD',
       streamAnalysis: { rootCauseAssumption: 'GMANA_ISSUE' },
       resourceAnalysis: resourcesReport
         ? {

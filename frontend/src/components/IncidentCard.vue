@@ -11,6 +11,9 @@
           @contextmenu.prevent="copyUuid"
           :title="`Right-click to copy ds_uuid`"
         >{{ incident.channelName }}</span>
+        <span v-if="incident.channelType" class="badge" :class="incident.channelType === 'LIVE' ? 'type-live' : 'type-vod'">
+          {{ incident.channelType }}
+        </span>
         <span v-if="incident.isVip" class="badge vip-badge">PRIORITIZED</span>
         <span class="badge state-badge" :class="`state-${incident.state.toLowerCase()}`">
           {{ incident.state.replace(/_/g, ' ') }}
@@ -25,6 +28,8 @@
         <span class="action-val">{{ incident.recommendedAction.replace(/_/g, ' ') }}</span>
         <span class="confidence" :class="confidenceClass">{{ incident.confidenceScore }}% conf</span>
       </div>
+
+
     </div>
 
     <div class="card-right">
@@ -117,6 +122,8 @@ const timeAgo = computed(() => {
   text-transform: uppercase; letter-spacing: .06em;
 }
 .vip-badge { background: rgba(248,81,73,.15); color: #f85149; border: 1px solid rgba(248,81,73,.3); }
+.type-live { background: rgba(77,157,224,.15); color: #4d9de0; border: 1px solid rgba(77,157,224,.3); }
+.type-vod  { background: rgba(63,185,80,.15);  color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
 .state-badge { background: var(--bd-sub); color: var(--tx-2); }
 .state-analyzing { color: #e3a23a; }
 .state-waiting_approval { background: rgba(227,162,58,.15); color: #e3a23a; border: 1px solid rgba(227,162,58,.3); }
@@ -133,6 +140,7 @@ const timeAgo = computed(() => {
 .conf-high { background: rgba(63,185,80,.15); color: #3fb950; }
 .conf-med  { background: rgba(227,162,58,.15); color: #e3a23a; }
 .conf-low  { background: rgba(248,81,73,.15); color: #f85149; }
+
 
 .card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
 .card-time { font-family: monospace; font-size: 11px; color: var(--tx-3); }
