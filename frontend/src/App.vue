@@ -11,12 +11,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
 import { useIncidentsStore } from '@/store/incidents';
-import { useVipChannelsStore } from '@/store/vipChannels';
 import AppHeader from '@/components/AppHeader.vue';
 import AlarmNotificationToast from '@/components/AlarmNotificationToast.vue';
 
 const store = useIncidentsStore();
-const vipStore = useVipChannelsStore();
 let pollTimer: ReturnType<typeof setInterval>;
 
 onMounted(async () => {
@@ -24,7 +22,6 @@ onMounted(async () => {
   // Immediately sync the active-only view so stale/closed alarms are removed
   // from the list without waiting for the first 20s poll tick.
   await store.pollActiveIncidents();
-  vipStore.fetchVipChannels();
   pollTimer = setInterval(() => store.pollActiveIncidents(), 20000);
 });
 
