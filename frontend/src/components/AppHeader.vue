@@ -8,6 +8,11 @@
       </div>
     </div>
 
+    <nav class="header-nav">
+      <button class="nav-btn" :class="{ active: route.name === 'dashboard' }" @click="router.push('/')">⚡ Alarms</button>
+      <button class="nav-btn" :class="{ active: route.name === 'monitoring' }" @click="router.push('/monitoring')">📡 Monitoring</button>
+    </nav>
+
     <div class="kpi-group">
       <div class="kpi">
         <span class="kpi-val red">{{ store.activeIncidents.length }}</span>
@@ -37,10 +42,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
 import RedisPanel from '@/components/RedisPanel.vue';
 import AlarmNotificationBell from '@/components/AlarmNotificationBell.vue';
+
+const router = useRouter();
+const route  = useRoute();
 
 const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();
@@ -98,6 +107,15 @@ if (saved === 'light') {
 @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:.5 } }
 .brand-name { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; letter-spacing: .06em; }
 .brand-tag { font-size: 10px; color: #4f5b6e; }
+
+.header-nav { display: flex; gap: 4px; margin-right: 16px; }
+.nav-btn {
+  background: none; border: 1px solid transparent;
+  color: var(--tx-2); padding: 4px 12px; border-radius: 6px;
+  font-size: 12px; font-weight: 500; cursor: pointer; transition: all .12s;
+}
+.nav-btn:hover { background: var(--bg-hover); color: var(--tx-1); border-color: var(--bd); }
+.nav-btn.active { background: var(--accent-bg); color: var(--accent); border-color: rgba(77,157,224,.3); }
 
 .kpi-group { display: flex; gap: 20px; flex: 1; }
 .kpi { display: flex; flex-direction: column; }
