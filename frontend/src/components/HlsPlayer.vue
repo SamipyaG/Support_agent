@@ -52,7 +52,7 @@ onBeforeUnmount(() => { hls?.destroy(); });
 <style scoped>
 .hls-player { position: relative; width: 100%; }
 .hls-video {
-  width: 100%; height: 180px;
+  width: 100%; height: 260px;
   background: #0d1017; border: 1px solid #252b36; border-radius: 6px;
   display: block;
 }

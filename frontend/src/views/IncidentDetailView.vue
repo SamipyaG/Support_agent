@@ -9,7 +9,55 @@
         <span class="badge state-badge" :class="`state-${store.selectedIncident.state.toLowerCase()}`">
           {{ store.selectedIncident.state.replace(/_/g, ' ') }}
         </span>
+
+        <!-- Info dropdown -->
+        <div class="hdr-info-wrap" ref="infoWrapRef">
+          <button class="hdr-info-btn" @click="showInfoPanel = !showInfoPanel">
+            Info <span class="hdr-chevron" :class="{ rotated: showInfoPanel }">▾</span>
+          </button>
+          <div v-if="showInfoPanel" class="hdr-info-dropdown">
+            <div class="hdr-info-row">
+              <span class="hdr-info-label">Cluster</span>
+              <span class="hdr-info-val mono">{{ store.selectedIncident.clusterId }}</span>
+            </div>
+            <div class="hdr-info-row">
+              <span class="hdr-info-label">Stream</span>
+              <span class="hdr-info-val mono">{{ store.selectedIncident.streamType }}</span>
+            </div>
+            <div class="hdr-info-row">
+              <span class="hdr-info-label">Reported</span>
+              <span class="hdr-info-val">{{ store.selectedIncident.reportedBy }}</span>
+            </div>
+            <div class="hdr-info-row">
+              <span class="hdr-info-label">Error</span>
+              <span class="hdr-info-val mono error-code">{{ store.selectedIncident.errorCode || '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Restart dropdown -->
+        <div
+          v-if="!['RESOLVED', 'CLOSED', 'FAILED'].includes(store.selectedIncident.state)"
+          class="hdr-info-wrap"
+          ref="restartWrapRef"
+        >
+          <button class="hdr-info-btn hdr-restart-btn" @click="showRestartPanel = !showRestartPanel">
+            ↻ Restart <span class="hdr-chevron" :class="{ rotated: showRestartPanel }">▾</span>
+          </button>
+          <div v-if="showRestartPanel" class="hdr-restart-dropdown">
+            <div class="hdr-restart-header">
+              <span class="hdr-restart-title">Service Restart</span>
+              <span class="hdr-restart-sub dim mono">{{ store.selectedIncident.clusterId }}</span>
+            </div>
+            <RestartWorkflow
+              :incident-id="store.selectedIncident._id"
+              :ds-uuid="store.selectedIncident.dsUuid"
+              :cluster-id="store.selectedIncident.clusterId"
+            />
+          </div>
+        </div>
       </div>
+
       <!-- Redis health button (top-right, near refresh) -->
       <div v-if="store.selectedIncident" class="hdr-redis-wrap" ref="redisWrapRef">
         <button
@@ -20,7 +68,7 @@
           <span class="hdr-redis-dot" :class="redisInstance ? redisStatusClass : 'status-unknown'"></span>
           Redis
           <span class="hdr-redis-name mono">{{ store.selectedIncident.redisInstance || '—' }}</span>
-          <span class="hdr-redis-chevron" :class="{ rotated: showRedisPanel }">▾</span>
+          <span class="hdr-chevron" :class="{ rotated: showRedisPanel }">▾</span>
         </button>
 
         <!-- Dropdown panel anchored to the button -->
@@ -99,7 +147,7 @@
     <div v-else-if="store.error" class="error-msg">{{ store.error }}</div>
 
     <div v-else-if="store.selectedIncident" class="detail-body">
-      <!-- Approval timer (if waiting) -->
+      <!-- Approval timer (if waiting) — renders as a toast via Teleport -->
       <ApprovalTimer
         v-if="store.selectedIncident.state === 'WAITING_APPROVAL'"
         :incident-id="store.selectedIncident._id"
@@ -112,43 +160,8 @@
 
       <!-- Incident overview -->
       <div class="detail-grid">
-        <!-- Left: info + players -->
+        <!-- Left: draft only -->
         <div class="detail-left">
-          <!-- Metadata card -->
-          <div class="info-card">
-            <div class="info-title">Incident Details</div>
-            <div class="info-grid">
-              <span class="info-key">UUID</span><span class="info-val mono">{{ store.selectedIncident.dsUuid }}</span>
-              <span class="info-key">Cluster</span><span class="info-val mono">{{ store.selectedIncident.clusterId }}</span>
-              <span class="info-key">Stream</span><span class="info-val mono">{{ store.selectedIncident.streamType }}</span>
-              <span class="info-key">Reported</span><span class="info-val">{{ store.selectedIncident.reportedBy }}</span>
-              <span class="info-key">Error</span><span class="info-val mono error-code">{{ store.selectedIncident.errorCode || '—' }}</span>
-              <span class="info-key">Restarts</span>
-              <span class="info-val mono" :class="{ 'warn': store.selectedIncident.restartAttempts > 0 }">
-                {{ store.selectedIncident.restartAttempts }} / {{ store.selectedIncident.maxRestartAttempts }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Stream Players — embedded side by side -->
-          <div class="info-card">
-            <div class="info-title">Stream Players</div>
-            <div class="players-grid">
-              <div class="player-embed">
-                <div class="player-embed-label source">Source</div>
-                <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
-                <div v-else class="player-no-url">No source URL</div>
-                <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
-              </div>
-              <div class="player-embed">
-                <div class="player-embed-label gmana">G-Mana</div>
-                <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
-                <div v-else class="player-no-url">No G-Mana URL</div>
-                <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
-              </div>
-            </div>
-          </div>
-
           <!-- Draft message -->
           <div class="info-card">
             <div class="info-title">Draft Customer Message</div>
@@ -160,16 +173,8 @@
           </div>
         </div>
 
-        <!-- Right: restart workflow + timeline + logs -->
+        <!-- Right: timeline + logs -->
         <div class="detail-right">
-          <!-- Restart Workflow -->
-          <RestartWorkflow
-            v-if="!['RESOLVED', 'CLOSED', 'FAILED'].includes(store.selectedIncident.state)"
-            :incident-id="store.selectedIncident._id"
-            :ds-uuid="store.selectedIncident.dsUuid"
-            :cluster-id="store.selectedIncident.clusterId"
-          />
-
           <!-- Timeline Table -->
           <div class="info-card">
             <div class="info-title-row">
@@ -188,7 +193,7 @@
                     <th>Trigger</th>
                     <th>Action</th>
                     <th>Details</th>
-                    <th>Elaspsed Time</th>
+                    <th>Elapsed Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -240,6 +245,25 @@
           </div>
         </div>
       </div>
+
+      <!-- Stream Players — full width below -->
+      <div class="info-card players-full">
+        <div class="info-title">Stream Players</div>
+        <div class="players-grid">
+          <div class="player-embed">
+            <div class="player-embed-label source">Source</div>
+            <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
+            <div v-else class="player-no-url">No source URL</div>
+            <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
+          </div>
+          <div class="player-embed">
+            <div class="player-embed-label gmana">G-Mana</div>
+            <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
+            <div v-else class="player-no-url">No G-Mana URL</div>
+            <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -259,8 +283,13 @@ const redisStore = useRedisStore();
 
 const draftMessage = ref('');
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
+
 const showRedisPanel = ref(false);
 const redisWrapRef = ref<HTMLElement | null>(null);
+const showInfoPanel = ref(false);
+const infoWrapRef = ref<HTMLElement | null>(null);
+const showRestartPanel = ref(false);
+const restartWrapRef = ref<HTMLElement | null>(null);
 
 function toggleRedisPanel(): void {
   showRedisPanel.value = !showRedisPanel.value;
@@ -269,9 +298,15 @@ function toggleRedisPanel(): void {
   }
 }
 
-function onClickOutsideRedis(e: MouseEvent): void {
+function onClickOutside(e: MouseEvent): void {
   if (redisWrapRef.value && !redisWrapRef.value.contains(e.target as Node)) {
     showRedisPanel.value = false;
+  }
+  if (infoWrapRef.value && !infoWrapRef.value.contains(e.target as Node)) {
+    showInfoPanel.value = false;
+  }
+  if (restartWrapRef.value && !restartWrapRef.value.contains(e.target as Node)) {
+    showRestartPanel.value = false;
   }
 }
 
@@ -332,13 +367,13 @@ function fmtTime(iso: string): string {
 }
 
 interface TimelineRow {
-  timeDisplay: string;    // "10:01:20" or "10:01:20 → 10:30:00"
-  duration: string;       // duration of this event block
+  timeDisplay: string;
+  duration: string;
   step: string;
   trigger: string;
   action: string;
   details: string;
-  incidentTime: string;   // running total from alarm start
+  incidentTime: string;
   count: number;
 }
 
@@ -409,11 +444,11 @@ function formatTime(ts: string): string {
 onMounted(() => {
   refresh();
   redisStore.fetchRedis();
-  document.addEventListener('click', onClickOutsideRedis);
+  document.addEventListener('click', onClickOutside);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('click', onClickOutsideRedis);
+  document.removeEventListener('click', onClickOutside);
 });
 </script>
 
@@ -441,6 +476,51 @@ onUnmounted(() => {
 }
 .btn-refresh:hover { background: var(--bg-hover); }
 
+/* ── Shared chevron ──────────────────────────────── */
+.hdr-chevron { font-size: 9px; transition: transform .2s; display: inline-block; }
+.hdr-chevron.rotated { transform: rotate(180deg); }
+
+/* ── Info dropdown ───────────────────────────────── */
+.hdr-info-wrap { position: relative; }
+.hdr-info-btn {
+  display: flex; align-items: center; gap: 4px;
+  background: transparent; border: 1px solid var(--bd); border-radius: 6px;
+  color: var(--tx-2); padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.hdr-info-btn:hover { border-color: var(--accent); color: var(--tx-1); background: var(--bg-hover); }
+.hdr-info-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  min-width: 200px; background: var(--bg-card); border: 1px solid var(--bd);
+  border-radius: 8px; z-index: 1000; box-shadow: var(--shadow);
+  padding: 6px 0; display: flex; flex-direction: column;
+  max-height: 220px; overflow-y: auto;
+}
+.hdr-info-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 7px 14px; border-bottom: 1px solid var(--bd-faint);
+}
+.hdr-info-row:last-child { border-bottom: none; }
+.hdr-info-label { font-size: 10px; color: var(--tx-3); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.hdr-info-val { font-size: 12px; color: var(--tx-1); text-align: right; }
+
+/* ── Restart dropdown ────────────────────────────── */
+.hdr-restart-btn { border-color: rgba(77,157,224,.4); color: #4d9de0; }
+.hdr-restart-btn:hover { border-color: #4d9de0; background: rgba(77,157,224,.08); color: #4d9de0; }
+.hdr-restart-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  width: 340px; background: #111318; border: 1px solid #252b36;
+  border-radius: 8px; z-index: 1000; box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.hdr-restart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 8px; border-bottom: 1px solid #1e2330;
+}
+.hdr-restart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #4f5b6e; }
+.hdr-restart-sub { font-size: 10px; }
+.hdr-restart-dropdown .restart-workflow { border: none; border-radius: 0; box-shadow: none; }
+
 /* ── Header Redis button + dropdown ──────────────── */
 .hdr-redis-wrap { position: relative; margin-left: auto; }
 .hdr-redis-btn {
@@ -458,8 +538,6 @@ onUnmounted(() => {
 .hdr-redis-dot.status-warning  { background: var(--col-warn); }
 .hdr-redis-dot.status-critical { background: var(--col-err); }
 .hdr-redis-name { font-size: 11px; opacity: .75; }
-.hdr-redis-chevron { font-size: 9px; transition: transform .2s; display: inline-block; }
-.hdr-redis-chevron.rotated { transform: rotate(180deg); }
 
 .hdr-ri-dropdown {
   position: absolute; top: calc(100% + 8px); right: 0;
@@ -556,7 +634,7 @@ onUnmounted(() => {
 @media (max-width: 700px) { .players-grid { grid-template-columns: 1fr; } }
 .player-embed { display: flex; flex-direction: column; gap: 5px; }
 .player-embed-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tx-3); }
-.player-no-url { height: 180px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
+.player-no-url { height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
 
 /* ── Draft message ───────────────────────────────── */
@@ -574,7 +652,8 @@ onUnmounted(() => {
 .btn-secondary:hover { background: var(--bd); color: var(--tx-1); }
 
 /* ── Audit table ─────────────────────────────────── */
-.audit-wrap { overflow-x: auto; overflow-y: auto; max-height: 380px; }
+.audit-wrap { overflow-x: auto; overflow-y: auto; max-height: 220px; }
+.players-full { margin-top: 0; }
 .audit-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .audit-table th {
   text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--bd);
