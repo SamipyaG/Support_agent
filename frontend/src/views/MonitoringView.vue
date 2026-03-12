@@ -204,7 +204,7 @@ const statusMap     = ref<Record<string, string>>({});
 const currentPanel = computed(() => panels.find(p => p.id === activePanel.value)!);
 
 /* ── Fetch ─────────────────────────────────────────────── */
-const API_KEY = import.meta.env.VITE_HUB_API_KEY as string;
+const API_KEY = import.meta.env.VITE_HUB_MONITOR_API_KEY as string;
 
 async function fetchData() {
   loading.value = true;
