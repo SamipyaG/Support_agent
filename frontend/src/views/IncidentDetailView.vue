@@ -162,6 +162,41 @@
       <div class="detail-grid">
         <!-- Left: draft only -->
         <div class="detail-left">
+          <!-- Metadata card -->
+          <div class="info-card">
+            <div class="info-title">Incident Details</div>
+            <div class="info-grid">
+              <span class="info-key">UUID</span><span class="info-val mono">{{ store.selectedIncident.dsUuid }}</span>
+              <span class="info-key">Cluster</span><span class="info-val mono">{{ store.selectedIncident.clusterId }}</span>
+              <span class="info-key">Stream</span><span class="info-val mono">{{ store.selectedIncident.streamType }}</span>
+              <span class="info-key">Reported</span><span class="info-val">{{ store.selectedIncident.reportedBy }}</span>
+              <span class="info-key">Error</span><span class="info-val mono error-code">{{ store.selectedIncident.errorCode || '—' }}</span>
+              <span class="info-key">Restarts</span>
+              <span class="info-val mono" :class="{ 'warn': store.selectedIncident.restartAttempts > 0 }">
+                {{ store.selectedIncident.restartAttempts }} / {{ store.selectedIncident.maxRestartAttempts }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Stream Players — embedded side by side -->
+          <div class="info-card">
+            <div class="info-title">Stream Players</div>
+            <div class="players-grid">
+              <div class="player-embed">
+                <div class="player-embed-label source">Source</div>
+                <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
+                <div v-else class="player-no-url">No source URL</div>
+                <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
+              </div>
+              <div class="player-embed">
+                <div class="player-embed-label gmana">G-Mana</div>
+                <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
+                <div v-else class="player-no-url">No G-Mana URL</div>
+                <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Draft message -->
           <div class="info-card">
             <div class="info-title">Draft Customer Message</div>
@@ -175,7 +210,15 @@
 
         <!-- Right: timeline + logs -->
         <div class="detail-right">
-          <!-- Timeline Table -->
+          <!-- Restart Workflow -->
+          <RestartWorkflow
+            v-if="!['RESOLVED', 'CLOSED', 'FAILED'].includes(store.selectedIncident.state)"
+            :incident-id="store.selectedIncident._id"
+            :ds-uuid="store.selectedIncident.dsUuid"
+            :cluster-id="store.selectedIncident.clusterId"
+          />
+
+          <!-- Timeline Audit Table -->
           <div class="info-card">
             <div class="info-title-row">
               <span class="info-title">Incident Timeline</span>
@@ -193,7 +236,7 @@
                     <th>Trigger</th>
                     <th>Action</th>
                     <th>Details</th>
-                    <th>Elapsed Time</th>
+                    <th>Elapsed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,19 +405,11 @@ function formatElapsed(ms: number): string {
   return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
 }
 
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-interface TimelineRow {
-  timeDisplay: string;
-  duration: string;
-  step: string;
-  trigger: string;
-  action: string;
-  details: string;
-  incidentTime: string;
-  count: number;
+function deriveTrigger(approvedBy: string, action: string): 'System' | 'Agent' | 'Manual' {
+  if (approvedBy === 'Manual') return 'Manual';
+  if (approvedBy === 'auto' || approvedBy === 'system') return action === 'ESCALATE' ? 'Agent' : 'System';
+  if (approvedBy && approvedBy.length > 0) return 'Manual';
+  return 'Agent';
 }
 
 const timelineRows = computed((): TimelineRow[] => {
@@ -634,7 +669,7 @@ onUnmounted(() => {
 @media (max-width: 700px) { .players-grid { grid-template-columns: 1fr; } }
 .player-embed { display: flex; flex-direction: column; gap: 5px; }
 .player-embed-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tx-3); }
-.player-no-url { height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
+.player-no-url { height: 180px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
 
 /* ── Draft message ───────────────────────────────── */
@@ -652,8 +687,7 @@ onUnmounted(() => {
 .btn-secondary:hover { background: var(--bd); color: var(--tx-1); }
 
 /* ── Audit table ─────────────────────────────────── */
-.audit-wrap { overflow-x: auto; overflow-y: auto; max-height: 220px; }
-.players-full { margin-top: 0; }
+.audit-wrap { overflow-x: auto; }
 .audit-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .audit-table th {
   text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--bd);

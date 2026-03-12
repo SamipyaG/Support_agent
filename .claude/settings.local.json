@@ -7,7 +7,13 @@
       "Bash(npm install hls.js --save)",
       "Bash(npm install --save-dev nodemon ts-node)",
       "Bash(node -e \":*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(grep -rn:*)",
+      "Bash(git add:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase --continue)",
+      "Bash(GIT_EDITOR=: git rebase --continue)",
+      "Bash(grep -r \"router\\\\.\\\\|app\\\\.\" /Users/samipyaghimire/Documents/g-mana-support-ai-v5/backend/src/routes/*.ts)"
     ]
   }
 }

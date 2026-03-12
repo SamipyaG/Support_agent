@@ -29,6 +29,9 @@
     </div>
 
     <div class="header-right">
+      <ClusterPanel label="Pending Pods" type="pending-pods" />
+      <ClusterPanel label="Components"   type="components" />
+      <ClusterPanel label="Coherency"    type="coherency" />
       <RedisPanel />
       <AlarmNotificationBell />
       <span class="live-pill"><span class="live-dot"></span>LIVE</span>
@@ -44,21 +47,23 @@
 import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
-import { useVipChannelsStore } from '@/store/vipChannels';
 import RedisPanel from '@/components/RedisPanel.vue';
 import AlarmNotificationBell from '@/components/AlarmNotificationBell.vue';
+import ClusterPanel from '@/components/ClusterPanel.vue';
+
+const router = useRouter();
+const route  = useRoute();
 
 const router = useRouter();
 const route  = useRoute();
 
 const store = useIncidentsStore();
-const vipStore = useVipChannelsStore();
 const waitingApprovals = computed(
   () => store.deduplicatedIncidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
 );
 
 const vipIncidentCount = computed(
-  () => store.activeIncidents.filter((i) => vipStore.isVipChannel(i.channelName)).length,
+  () => store.activeIncidents.filter((i) => i.isVip).length,
 );
 
 const isDark = ref(!document.documentElement.classList.contains('light'));

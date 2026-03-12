@@ -124,16 +124,13 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
-import { useVipChannelsStore } from '@/store/vipChannels';
 import IncidentCard from '@/components/IncidentCard.vue';
 
 const store = useIncidentsStore();
-const vipStore = useVipChannelsStore();
 const router = useRouter();
 
-// Incidents whose channelName belongs to Keshet or Reshet (from G11 channel list)
 const vipIncidents = computed(() =>
-  store.activeIncidents.filter((i) => vipStore.isVipChannel(i.channelName)),
+  store.activeIncidents.filter((i) => i.isVip),
 );
 
 const manualUuid = ref('');

@@ -9,6 +9,7 @@ import approvalRoutes from './routes/approvals';
 import alarmRoutes from './routes/alarms';
 import redisRoutes from './routes/redis';
 import channelRoutes from './routes/channels';
+import jiraRoutes from './routes/jira';
 
 const app = express();
 
@@ -23,5 +24,6 @@ app.use('/api/approve', approvalRoutes);
 app.use('/api/alarms', alarmRoutes);
 app.use('/api/redis', redisRoutes);
 app.use('/api/channels', channelRoutes);
+app.use('/api/jira', jiraRoutes);
 
 export default app;

@@ -100,6 +100,7 @@ export interface Incident {
   clusterId: string;
   redisInstance: string;
   streamType: 'HLS' | 'DASH';
+  channelType: 'LIVE' | 'VOD';
   isVip: boolean;
   customerId: string;
   state: IncidentState;

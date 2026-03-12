@@ -105,4 +105,31 @@ export class JiraTool {
     await this.addComment(ticketKey, `✅ Resolved: ${resolution}`);
     logger.info(`[Jira] Ticket ${ticketKey} closed`);
   }
+
+  async testConnection(): Promise<{ ok: boolean; email: string; displayName: string }> {
+    return withRetry(async () => {
+      const res = await this.client.get('/myself');
+      return {
+        ok: true,
+        email: res.data.emailAddress || '',
+        displayName: res.data.displayName || '',
+      };
+    }, 'testConnection()');
+  }
+
+  async findExistingTicket(dsUuid: string): Promise<JiraTicket | null> {
+    return withRetry(async () => {
+      const jql = `project = "${this.projectKey}" AND text ~ "${dsUuid}" AND statusCategory != Done ORDER BY created DESC`;
+      const res = await this.client.get('/search', {
+        params: { jql, maxResults: 1, fields: 'summary,status' },
+      });
+      const issue = res.data.issues?.[0];
+      if (!issue) return null;
+      return {
+        id: issue.id,
+        key: issue.key,
+        url: `${process.env.JIRA_BASE_URL}/browse/${issue.key}`,
+      };
+    }, `findExistingTicket(${dsUuid})`);
+  }
 }
