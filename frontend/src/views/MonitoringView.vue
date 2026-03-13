@@ -195,7 +195,9 @@ const panels = [
 /* ── State ─────────────────────────────────────────────── */
 const activePanel   = ref('opensearch');
 const sidebarCollapsed = ref(false);
-const data          = ref<unknown>(null);
+// API response shape is fully dynamic — use any for template property access
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const data = ref<any>(null);
 const loading       = ref(false);
 const error         = ref('');
 const lastUpdated   = ref('');
