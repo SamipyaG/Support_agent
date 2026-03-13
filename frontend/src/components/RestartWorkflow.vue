@@ -29,6 +29,9 @@
         </button>
 
         <div v-if="uhError" class="status-error">{{ uhError }}</div>
+        <div v-if="uhAnalysisSummary" class="analysis-summary" :class="uhAnalysisClass">
+          {{ uhAnalysisSummary }}
+        </div>
         <div v-if="uhResult" class="status-ok">
           {{ uhResult.message }}
           <span class="dim"> · {{ uhResult.deploymentName }}</span>
@@ -69,6 +72,9 @@
         </button>
 
         <div v-if="ciError" class="status-error">{{ ciError }}</div>
+        <div v-if="ciAnalysisSummary" class="analysis-summary" :class="ciAnalysisClass">
+          {{ ciAnalysisSummary }}
+        </div>
         <div v-if="ciResult" class="status-ok">
           {{ ciResult.message }}
           <span class="dim"> · {{ ciResult.deploymentName }}</span>
@@ -80,8 +86,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
-import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile } from '@/api/restart';
-import type { RestartResult } from '@/api/restart';
+import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
+import type { RestartResult, LogAnalysis } from '@/api/restart';
 
 const props = defineProps<{
   incidentId: string;
@@ -89,20 +95,54 @@ const props = defineProps<{
   clusterId: string;
 }>();
 
+const emit = defineEmits<{
+  (e: 'log-analyzed', service: string, analysis: LogAnalysis): void;
+}>();
+
 type ServiceState = 'idle' | 'fetching-logs' | 'restarting' | 'error';
 
 const uhState = ref<ServiceState>('idle');
 const uhResult = ref<RestartResult | null>(null);
 const uhError = ref('');
+const uhAnalysis = ref<LogAnalysis | null>(null);
 
 const ciState = ref<ServiceState>('idle');
 const ciResult = ref<RestartResult | null>(null);
 const ciError = ref('');
+const ciAnalysis = ref<LogAnalysis | null>(null);
 
 const countdown = ref(0);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
 const ciEnabled = computed(() => uhResult.value?.success === true && countdown.value === 0);
+
+function buildSummary(analysis: LogAnalysis | null): string {
+  if (!analysis) return '';
+  const crit  = analysis.issues.filter(i => i.severity === 'CRITICAL').length;
+  const errs  = analysis.issues.filter(i => i.severity === 'ERROR').length;
+  const warns = analysis.issues.filter(i => i.severity === 'WARN').length;
+  if (!crit && !errs && !warns) return '✓ No issues in logs';
+  const parts: string[] = [];
+  if (crit)  parts.push(`${crit} CRITICAL`);
+  if (errs)  parts.push(`${errs} ERR`);
+  if (warns) parts.push(`${warns} WARN`);
+  return `⚠ ${parts.join(' · ')} found`;
+}
+
+function buildSummaryClass(analysis: LogAnalysis | null): string {
+  if (!analysis) return '';
+  const hasCrit = analysis.issues.some(i => i.severity === 'CRITICAL');
+  const hasErr  = analysis.issues.some(i => i.severity === 'ERROR');
+  const hasWarn = analysis.issues.some(i => i.severity === 'WARN');
+  if (hasCrit || hasErr) return 'summary-err';
+  if (hasWarn) return 'summary-warn';
+  return 'summary-ok';
+}
+
+const uhAnalysisSummary = computed(() => buildSummary(uhAnalysis.value));
+const uhAnalysisClass   = computed(() => buildSummaryClass(uhAnalysis.value));
+const ciAnalysisSummary = computed(() => buildSummary(ciAnalysis.value));
+const ciAnalysisClass   = computed(() => buildSummaryClass(ciAnalysis.value));
 
 function startCountdown(): void {
   countdown.value = 60;
@@ -117,10 +157,15 @@ function startCountdown(): void {
 
 async function doRestartUH(): Promise<void> {
   uhError.value = '';
+  uhAnalysis.value = null;
   uhState.value = 'fetching-logs';
   try {
     const logs = await fetchUHLogs(props.incidentId);
     downloadTextFile(logs.logs, `uh-${props.dsUuid}-logs.txt`);
+
+    // Analyse logs and surface results before restarting
+    uhAnalysis.value = analyzeLog(logs, 'User Handler');
+    emit('log-analyzed', 'User Handler', uhAnalysis.value);
 
     uhState.value = 'restarting';
     uhResult.value = await restartUH(props.incidentId);
@@ -135,10 +180,15 @@ async function doRestartUH(): Promise<void> {
 
 async function doRestartCI(): Promise<void> {
   ciError.value = '';
+  ciAnalysis.value = null;
   ciState.value = 'fetching-logs';
   try {
     const logs = await fetchCILogs(props.incidentId);
     downloadTextFile(logs.logs, `ci-${props.dsUuid}-logs.txt`);
+
+    // Analyse logs and surface results before restarting
+    ciAnalysis.value = analyzeLog(logs, 'Cuemana In');
+    emit('log-analyzed', 'Cuemana In', ciAnalysis.value);
 
     ciState.value = 'restarting';
     ciResult.value = await restartCI(props.incidentId);
@@ -190,6 +240,14 @@ onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer); });
 
 .status-ok { font-size: 10px; color: #3fb950; }
 .status-error { font-size: 10px; color: #f85149; word-break: break-word; }
+
+.analysis-summary {
+  font-size: 10px; font-weight: 600; padding: 4px 8px;
+  border-radius: 5px; font-family: monospace;
+}
+.summary-err  { color: #f85149; background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.2); }
+.summary-warn { color: #e3a23a; background: rgba(227,162,58,.08); border: 1px solid rgba(227,162,58,.2); }
+.summary-ok   { color: #3fb950; background: rgba(63,185,80,.08);  border: 1px solid rgba(63,185,80,.2); }
 
 .countdown-block { display: flex; flex-direction: column; gap: 4px; }
 .countdown-label { font-size: 10px; color: #e3a23a; font-family: monospace; }

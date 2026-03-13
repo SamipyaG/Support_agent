@@ -53,6 +53,7 @@
               :incident-id="store.selectedIncident._id"
               :ds-uuid="store.selectedIncident.dsUuid"
               :cluster-id="store.selectedIncident.clusterId"
+              @log-analyzed="onLogAnalyzed"
             />
           </div>
         </div>
@@ -160,8 +161,14 @@
 
       <!-- Incident overview -->
       <div class="detail-grid">
-        <!-- Left: draft only -->
+        <!-- Left: draft + log analysis -->
         <div class="detail-left">
+          <!-- Log Analysis (appears once logs are downloaded before restart) -->
+          <LogAnalysisPanel
+            v-if="logAnalyses.length > 0"
+            :analyses="logAnalyses"
+          />
+
           <!-- Draft message -->
           <div class="info-card">
             <div class="info-title">Draft Customer Message</div>
@@ -276,6 +283,8 @@ import { useRedisStore } from '@/store/redis';
 import ApprovalTimer from '@/components/ApprovalTimer.vue';
 import HlsPlayer from '@/components/HlsPlayer.vue';
 import RestartWorkflow from '@/components/RestartWorkflow.vue';
+import LogAnalysisPanel from '@/components/LogAnalysisPanel.vue';
+import type { LogAnalysis } from '@/api/restart';
 
 const route = useRoute();
 const store = useIncidentsStore();
@@ -283,6 +292,13 @@ const redisStore = useRedisStore();
 
 const draftMessage = ref('');
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
+const logAnalyses = ref<LogAnalysis[]>([]);
+
+function onLogAnalyzed(_service: string, analysis: LogAnalysis): void {
+  const idx = logAnalyses.value.findIndex(a => a.service === analysis.service);
+  if (idx >= 0) logAnalyses.value[idx] = analysis;
+  else logAnalyses.value.push(analysis);
+}
 
 const showRedisPanel = ref(false);
 const redisWrapRef = ref<HTMLElement | null>(null);
