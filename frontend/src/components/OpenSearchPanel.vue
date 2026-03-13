@@ -35,7 +35,11 @@
 
         <!-- ── OpenSearch Nodes ───────────────────── -->
         <div class="section-title">OpenSearch Nodes</div>
-        <div v-if="osNodes.length === 0" class="dp-state">No data</div>
+        <div v-if="osNodes.length === 0 && osData" class="raw-dump">
+          <div class="raw-label">Raw API response (keys: {{ Object.keys(osData).join(', ') }}):</div>
+          <pre>{{ JSON.stringify(osData, null, 2).slice(0, 800) }}</pre>
+        </div>
+        <div v-else-if="osNodes.length === 0" class="dp-state">No data</div>
         <div v-else class="dp-table-wrap">
           <table class="dp-table">
             <thead><tr>
@@ -109,8 +113,15 @@ const lastUpdated = ref('');
 const osNodes = computed((): any[] => {
   const d = osData.value;
   if (!d) return [];
-  if (Array.isArray(d.nodes)) return d.nodes;
-  if (Array.isArray(d))       return d;
+  if (Array.isArray(d.nodes))      return d.nodes;
+  if (Array.isArray(d.data))       return d.data;
+  if (Array.isArray(d.nodeStats))  return d.nodeStats;
+  if (Array.isArray(d.clusterNodes)) return d.clusterNodes;
+  if (Array.isArray(d))            return d;
+  // try first array-valued key
+  for (const val of Object.values(d)) {
+    if (Array.isArray(val) && val.length > 0) return val as any[];
+  }
   return [];
 });
 
@@ -371,4 +382,8 @@ function diskBarCls(v: unknown): string {
 .val-ok   { color: var(--col-ok); }
 .val-warn { color: var(--col-warn); }
 .val-err  { color: var(--col-err); font-weight: 700; }
+
+.raw-dump { padding: 10px 14px; }
+.raw-label { font-size: 10px; color: var(--col-warn); margin-bottom: 4px; font-weight: 600; }
+.raw-dump pre { font-size: 9px; font-family: monospace; color: var(--tx-2); white-space: pre-wrap; word-break: break-all; background: var(--bg-deep); padding: 8px; border-radius: 4px; }
 </style>
