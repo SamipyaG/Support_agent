@@ -161,14 +161,8 @@
 
       <!-- Incident overview -->
       <div class="detail-grid">
-        <!-- Left: draft + log analysis -->
+        <!-- Left: draft + stream message -->
         <div class="detail-left">
-          <!-- Log Analysis (appears once logs are downloaded before restart) -->
-          <LogAnalysisPanel
-            v-if="logAnalyses.length > 0"
-            :analyses="logAnalyses"
-          />
-
           <!-- Draft message -->
           <div class="info-card">
             <div class="info-title">Draft Customer Message</div>
@@ -180,76 +174,104 @@
           </div>
         </div>
 
-        <!-- Right: timeline + logs -->
+        <!-- Right: tabs (Timeline | Logs) -->
         <div class="detail-right">
-          <!-- Timeline Table -->
-          <div class="info-card">
-            <div class="info-title-row">
-              <span class="info-title">Incident Timeline</span>
-              <span v-if="incidentDuration" class="tl-duration-pill">Total: {{ incidentDuration }}</span>
-            </div>
-
-            <div v-if="!timelineRows.length" class="tl-empty">No timeline data yet.</div>
-            <div v-else class="audit-wrap">
-              <table class="audit-table">
-                <thead>
-                  <tr>
-                    <th>Time Range</th>
-                    <th>Duration</th>
-                    <th>Step</th>
-                    <th>Trigger</th>
-                    <th>Action</th>
-                    <th>Details</th>
-                    <th>Elapsed Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, i) in timelineRows" :key="i" :class="{ 'row-grouped': row.count > 1 }">
-                    <td class="mono time-cell">
-                      {{ row.timeDisplay }}
-                      <span v-if="row.count > 1" class="repeat-badge">×{{ row.count }}</span>
-                    </td>
-                    <td class="mono dim">{{ row.duration }}</td>
-                    <td>
-                      <span class="step-badge" :class="`step-${row.step.toLowerCase().replace(/\s+/g, '-')}`">
-                        {{ row.step }}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="trigger-badge" :class="`trig-${row.trigger.toLowerCase()}`">
-                        {{ row.trigger }}
-                      </span>
-                    </td>
-                    <td class="action-cell">{{ row.action }}</td>
-                    <td class="details-cell">{{ row.details }}</td>
-                    <td class="mono elapsed-cell">{{ row.incidentTime }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <!-- Tab bar -->
+          <div class="right-tabs">
+            <button
+              class="right-tab"
+              :class="{ active: activeRightTab === 'timeline' }"
+              @click="activeRightTab = 'timeline'"
+            >
+              Timeline
+            </button>
+            <button
+              v-if="logAnalyses.length > 0"
+              class="right-tab"
+              :class="{ active: activeRightTab === 'logs', 'tab-has-errors': totalLogErrors > 0 }"
+              @click="activeRightTab = 'logs'"
+            >
+              Logs
+              <span v-if="totalLogErrors > 0" class="tab-err-badge">{{ totalLogErrors }} Error{{ totalLogErrors !== 1 ? 's' : '' }}</span>
+              <span v-else class="tab-ok-badge">✓ Clean</span>
+            </button>
           </div>
 
-          <!-- Escalations -->
-          <div v-if="store.selectedIncident.escalations?.length" class="info-card">
-            <div class="info-title">Escalations</div>
-            <div v-for="esc in store.selectedIncident.escalations" :key="esc._id" class="esc-row">
-              <span class="esc-reason">{{ esc.reason }}</span>
-              <span class="esc-to dim">→ {{ esc.escalatedTo }}</span>
-              <span class="esc-time dim mono">{{ formatTime(esc.createdAt) }}</span>
-            </div>
-          </div>
+          <!-- Timeline panel -->
+          <template v-if="activeRightTab === 'timeline'">
+            <div class="info-card">
+              <div class="info-title-row">
+                <span class="info-title">Incident Timeline</span>
+                <span v-if="incidentDuration" class="tl-duration-pill">Total: {{ incidentDuration }}</span>
+              </div>
 
-          <!-- Action logs -->
-          <div v-if="store.selectedIncident.actions?.length" class="info-card">
-            <div class="info-title">Action Logs</div>
-            <div v-for="log in store.selectedIncident.actions" :key="log._id" class="log-row">
-              <span class="log-status-dot" :class="log.status === 'success' ? 'dot-green' : 'dot-red'"></span>
-              <span class="log-action mono">{{ log.action }}</span>
-              <span class="log-dur dim">{{ log.durationMs }}ms</span>
-              <span class="log-by dim">{{ log.executedBy }}</span>
-              <span class="log-time dim mono">{{ formatTime(log.createdAt) }}</span>
+              <div v-if="!timelineRows.length" class="tl-empty">No timeline data yet.</div>
+              <div v-else class="audit-wrap">
+                <table class="audit-table">
+                  <thead>
+                    <tr>
+                      <th>Time Range</th>
+                      <th>Duration</th>
+                      <th>Step</th>
+                      <th>Trigger</th>
+                      <th>Action</th>
+                      <th>Details</th>
+                      <th>Elapsed Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, i) in timelineRows" :key="i" :class="{ 'row-grouped': row.count > 1 }">
+                      <td class="mono time-cell">
+                        {{ row.timeDisplay }}
+                        <span v-if="row.count > 1" class="repeat-badge">×{{ row.count }}</span>
+                      </td>
+                      <td class="mono dim">{{ row.duration }}</td>
+                      <td>
+                        <span class="step-badge" :class="`step-${row.step.toLowerCase().replace(/\s+/g, '-')}`">
+                          {{ row.step }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="trigger-badge" :class="`trig-${row.trigger.toLowerCase()}`">
+                          {{ row.trigger }}
+                        </span>
+                      </td>
+                      <td class="action-cell">{{ row.action }}</td>
+                      <td class="details-cell">{{ row.details }}</td>
+                      <td class="mono elapsed-cell">{{ row.incidentTime }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            <!-- Escalations -->
+            <div v-if="store.selectedIncident.escalations?.length" class="info-card">
+              <div class="info-title">Escalations</div>
+              <div v-for="esc in store.selectedIncident.escalations" :key="esc._id" class="esc-row">
+                <span class="esc-reason">{{ esc.reason }}</span>
+                <span class="esc-to dim">→ {{ esc.escalatedTo }}</span>
+                <span class="esc-time dim mono">{{ formatTime(esc.createdAt) }}</span>
+              </div>
+            </div>
+
+            <!-- Action logs -->
+            <div v-if="store.selectedIncident.actions?.length" class="info-card">
+              <div class="info-title">Action Logs</div>
+              <div v-for="log in store.selectedIncident.actions" :key="log._id" class="log-row">
+                <span class="log-status-dot" :class="log.status === 'success' ? 'dot-green' : 'dot-red'"></span>
+                <span class="log-action mono">{{ log.action }}</span>
+                <span class="log-dur dim">{{ log.durationMs }}ms</span>
+                <span class="log-by dim">{{ log.executedBy }}</span>
+                <span class="log-time dim mono">{{ formatTime(log.createdAt) }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Logs panel -->
+          <template v-else-if="activeRightTab === 'logs' && logAnalyses.length > 0">
+            <LogAnalysisPanel :analyses="logAnalyses" />
+          </template>
         </div>
       </div>
 
@@ -293,11 +315,18 @@ const redisStore = useRedisStore();
 const draftMessage = ref('');
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
 const logAnalyses = ref<LogAnalysis[]>([]);
+const activeRightTab = ref<'timeline' | 'logs'>('timeline');
+
+const totalLogErrors = computed(() =>
+  logAnalyses.value.reduce((s, a) => s + a.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length, 0),
+);
 
 function onLogAnalyzed(_service: string, analysis: LogAnalysis): void {
   const idx = logAnalyses.value.findIndex(a => a.service === analysis.service);
   if (idx >= 0) logAnalyses.value[idx] = analysis;
   else logAnalyses.value.push(analysis);
+  // Auto-switch to Logs tab when first analysis arrives
+  if (logAnalyses.value.length === 1) activeRightTab.value = 'logs';
 }
 
 const showRedisPanel = ref(false);
@@ -736,4 +765,39 @@ onUnmounted(() => {
 .dot-red   { background: var(--col-err); }
 .log-action { font-size: 11px; flex: 1; color: var(--tx-1); }
 .log-dur, .log-by, .log-time { font-size: 10px; color: var(--tx-3); }
+
+/* ── Right-panel tab bar ──────────────────────────── */
+.right-tabs {
+  display: flex; align-items: center; gap: 4px;
+  padding-bottom: 2px;
+}
+.right-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 6px;
+  border: 1px solid var(--bd); background: transparent;
+  color: var(--tx-3); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.right-tab:hover { background: var(--bg-hover); color: var(--tx-1); }
+.right-tab.active {
+  background: var(--accent-bg); border-color: var(--accent); color: var(--accent);
+}
+.right-tab.tab-has-errors.active {
+  background: rgba(248,81,73,.1); border-color: rgba(248,81,73,.5); color: #e07070;
+}
+.right-tab.tab-has-errors:not(.active):hover {
+  background: rgba(248,81,73,.06); border-color: rgba(248,81,73,.3); color: #e07070;
+}
+.tab-err-badge {
+  font-size: 9px; font-weight: 800; padding: 1px 6px;
+  border-radius: 8px; text-transform: uppercase; letter-spacing: .04em;
+  background: rgba(248,81,73,.18); color: #f85149;
+  border: 1px solid rgba(248,81,73,.3);
+}
+.tab-ok-badge {
+  font-size: 9px; font-weight: 700; padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(63,185,80,.12); color: #3fb950;
+  border: 1px solid rgba(63,185,80,.25);
+}
 </style>
