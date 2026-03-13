@@ -127,7 +127,8 @@ const dotClass = computed(() => {
 });
 
 const lsMemory = computed(() => {
-  const mem = lsData.value?.jvm?.mem;
+  // API returns mem at top level: { mem: { heap_used_in_bytes, heap_max_in_bytes } }
+  const mem = lsData.value?.mem ?? lsData.value?.jvm?.mem;
   if (!mem) return '—';
   const used = mem.heap_used_in_bytes;
   const max  = mem.heap_max_in_bytes;
@@ -138,7 +139,6 @@ const lsMemory = computed(() => {
 const lsCpu = computed(() => {
   const d = lsData.value;
   if (!d) return '—';
-  // try both field shapes
   const pct = d.process_cpu_percent ?? d.process?.cpu?.percent;
   return pct != null ? `${Number(pct).toFixed(1)}%` : '—';
 });
@@ -203,32 +203,40 @@ function fmtPct(v: unknown): string {
 }
 
 function statusCls(v: unknown): string {
-  const s = String(v ?? '').toLowerCase();
-  if (s === 'ok' || s === 'green' || s === 'healthy') return 'badge-ok';
-  if (s === 'yellow' || s === 'warning') return 'badge-warn';
-  return 'badge-err';
+  const s = String(v ?? '').toUpperCase();
+  if (s === 'OK')       return 'badge-ok';
+  if (s === 'WARNING')  return 'badge-warn';
+  if (s === 'CRITICAL') return 'badge-err';
+  if (s === 'NA')       return 'badge-neutral';
+  // fallback for green/healthy etc.
+  const sl = s.toLowerCase();
+  if (sl === 'green' || sl === 'healthy') return 'badge-ok';
+  if (sl === 'yellow' || sl === 'degraded') return 'badge-warn';
+  if (sl === 'red' || sl === 'down' || sl === 'failed') return 'badge-err';
+  return 'badge-neutral';
 }
 
 function dashboardCls(v: unknown): string {
-  const s = String(v ?? '').toLowerCase();
-  if (s === 'ok' || s === 'green') return 'badge-ok';
-  if (s === 'na' || s === '') return 'badge-neutral';
+  const s = String(v ?? '').toUpperCase();
+  if (s === 'OK')      return 'badge-ok';
+  if (s === 'WARNING') return 'badge-warn';
+  if (s === 'NA' || s === '') return 'badge-neutral';
   return 'badge-warn';
 }
 
 function diskUsageCls(v: unknown): string {
   const n = parseFloat(String(v ?? ''));
   if (isNaN(n)) return '';
-  if (n > 80) return 'val-err';
-  if (n > 60) return 'val-warn';
+  if (n > 85) return 'val-err';
+  if (n > 70) return 'val-warn';
   return '';
 }
 
 function diskBarCls(v: unknown): string {
   const n = parseFloat(String(v ?? ''));
   if (isNaN(n)) return 'bar-green';
-  if (n > 80) return 'bar-red';
-  if (n > 60) return 'bar-yellow';
+  if (n > 85) return 'bar-red';
+  if (n > 70) return 'bar-yellow';
   return 'bar-green';
 }
 </script>
