@@ -174,37 +174,38 @@
           </div>
         </div>
 
-        <!-- Right: tabs (Timeline | Logs) -->
+        <!-- Right: single card with title + tabs + content -->
         <div class="detail-right">
-          <!-- Tab bar -->
-          <div class="right-tabs">
-            <button
-              class="right-tab"
-              :class="{ active: activeRightTab === 'timeline' }"
-              @click="activeRightTab = 'timeline'"
-            >
-              Timeline
-            </button>
-            <button
-              v-if="logAnalyses.length > 0"
-              class="right-tab"
-              :class="{ active: activeRightTab === 'logs', 'tab-has-errors': totalLogErrors > 0 }"
-              @click="activeRightTab = 'logs'"
-            >
-              Logs
-              <span v-if="totalLogErrors > 0" class="tab-err-badge">{{ totalLogErrors }} Error{{ totalLogErrors !== 1 ? 's' : '' }}</span>
-              <span v-else class="tab-ok-badge">✓ Clean</span>
-            </button>
-          </div>
-
-          <!-- Timeline panel -->
-          <template v-if="activeRightTab === 'timeline'">
-            <div class="info-card">
-              <div class="info-title-row">
+          <div class="info-card right-main-card">
+            <!-- Card title row with tab bar -->
+            <div class="right-card-header">
+              <div class="info-title-row right-title-row">
                 <span class="info-title">Incident Timeline</span>
-                <span v-if="incidentDuration" class="tl-duration-pill">Total: {{ incidentDuration }}</span>
+                <span v-if="incidentDuration && activeRightTab === 'timeline'" class="tl-duration-pill">Total: {{ incidentDuration }}</span>
               </div>
+              <div class="right-tabs">
+                <button
+                  class="right-tab"
+                  :class="{ active: activeRightTab === 'timeline' }"
+                  @click="activeRightTab = 'timeline'"
+                >
+                  Timeline
+                </button>
+                <button
+                  v-if="logAnalyses.length > 0"
+                  class="right-tab"
+                  :class="{ active: activeRightTab === 'logs', 'tab-has-errors': totalLogErrors > 0 }"
+                  @click="activeRightTab = 'logs'"
+                >
+                  Logs
+                  <span v-if="totalLogErrors > 0" class="tab-err-badge">{{ totalLogErrors }} Error{{ totalLogErrors !== 1 ? 's' : '' }}</span>
+                  <span v-else class="tab-ok-badge">✓ Clean</span>
+                </button>
+              </div>
+            </div>
 
+            <!-- Timeline tab content -->
+            <template v-if="activeRightTab === 'timeline'">
               <div v-if="!timelineRows.length" class="tl-empty">No timeline data yet.</div>
               <div v-else class="audit-wrap">
                 <table class="audit-table">
@@ -243,35 +244,35 @@
                   </tbody>
                 </table>
               </div>
-            </div>
+            </template>
 
-            <!-- Escalations -->
-            <div v-if="store.selectedIncident.escalations?.length" class="info-card">
-              <div class="info-title">Escalations</div>
-              <div v-for="esc in store.selectedIncident.escalations" :key="esc._id" class="esc-row">
-                <span class="esc-reason">{{ esc.reason }}</span>
-                <span class="esc-to dim">→ {{ esc.escalatedTo }}</span>
-                <span class="esc-time dim mono">{{ formatTime(esc.createdAt) }}</span>
-              </div>
-            </div>
+            <!-- Logs tab content (accordion) -->
+            <template v-else-if="activeRightTab === 'logs' && logAnalyses.length > 0">
+              <LogAnalysisPanel :analyses="logAnalyses" />
+            </template>
+          </div>
 
-            <!-- Action logs -->
-            <div v-if="store.selectedIncident.actions?.length" class="info-card">
-              <div class="info-title">Action Logs</div>
-              <div v-for="log in store.selectedIncident.actions" :key="log._id" class="log-row">
-                <span class="log-status-dot" :class="log.status === 'success' ? 'dot-green' : 'dot-red'"></span>
-                <span class="log-action mono">{{ log.action }}</span>
-                <span class="log-dur dim">{{ log.durationMs }}ms</span>
-                <span class="log-by dim">{{ log.executedBy }}</span>
-                <span class="log-time dim mono">{{ formatTime(log.createdAt) }}</span>
-              </div>
+          <!-- Escalations -->
+          <div v-if="store.selectedIncident.escalations?.length" class="info-card">
+            <div class="info-title">Escalations</div>
+            <div v-for="esc in store.selectedIncident.escalations" :key="esc._id" class="esc-row">
+              <span class="esc-reason">{{ esc.reason }}</span>
+              <span class="esc-to dim">→ {{ esc.escalatedTo }}</span>
+              <span class="esc-time dim mono">{{ formatTime(esc.createdAt) }}</span>
             </div>
-          </template>
+          </div>
 
-          <!-- Logs panel -->
-          <template v-else-if="activeRightTab === 'logs' && logAnalyses.length > 0">
-            <LogAnalysisPanel :analyses="logAnalyses" />
-          </template>
+          <!-- Action logs -->
+          <div v-if="store.selectedIncident.actions?.length" class="info-card">
+            <div class="info-title">Action Logs</div>
+            <div v-for="log in store.selectedIncident.actions" :key="log._id" class="log-row">
+              <span class="log-status-dot" :class="log.status === 'success' ? 'dot-green' : 'dot-red'"></span>
+              <span class="log-action mono">{{ log.action }}</span>
+              <span class="log-dur dim">{{ log.durationMs }}ms</span>
+              <span class="log-by dim">{{ log.executedBy }}</span>
+              <span class="log-time dim mono">{{ formatTime(log.createdAt) }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -766,10 +767,23 @@ onUnmounted(() => {
 .log-action { font-size: 11px; flex: 1; color: var(--tx-1); }
 .log-dur, .log-by, .log-time { font-size: 10px; color: var(--tx-3); }
 
-/* ── Right-panel tab bar ──────────────────────────── */
+/* ── Right-panel card header + tab bar ───────────── */
+.right-main-card { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.right-card-header {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--bd);
+}
+.right-title-row { margin-bottom: 0 !important; }
+.right-main-card .audit-wrap { padding: 0 2px; }
+.right-main-card .tl-empty { padding: 16px 14px; }
+.right-main-card > template + * { padding: 0 14px 14px; }
+/* inner padding for timeline & logs content */
+.right-main-card .audit-wrap { padding: 0 14px 14px; }
+.right-main-card .tl-empty   { padding: 16px 14px; }
+
 .right-tabs {
   display: flex; align-items: center; gap: 4px;
-  padding-bottom: 2px;
 }
 .right-tab {
   display: flex; align-items: center; gap: 6px;
