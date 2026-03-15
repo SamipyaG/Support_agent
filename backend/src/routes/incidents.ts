@@ -390,7 +390,8 @@ INSTRUCTIONS:
 2. Follow the ${issueLabel} workflow based on the current state: ${incident.state}.
 3. Keep messages professional, concise, and customer-friendly.
 4. If support asks for a variation or different tone, provide it.
-5. Only suggest messages — do not take actions yourself.`;
+5. Only suggest messages — do not take actions yourself.
+6. CRITICAL — SOURCE ISSUE RULE: If this is a SOURCE ISSUE, NEVER use phrases like "Our team is analyzing" or "We are working to resolve it on our side". Those are for G-Mana issues only. For source issues, always direct the customer to check their source encoder/feed.`;
 
   const fallback = buildFallbackReply(incident.channelName, incident.state, issueType);
 
@@ -411,6 +412,73 @@ INSTRUCTIONS:
 
   const reply = await Promise.race([openaiPromise, timeoutPromise]);
   res.json({ reply });
+});
+
+/**
+ * PATCH /api/incidents/:id/state
+ * Manually change the incident state (Support action).
+ * Pushes a timeline entry and actionHistory record.
+ * Body: { state: string }
+ */
+const MANUAL_STATES = ['NEW', 'ANALYZING', 'ESCALATED', 'RESOLVED'] as const;
+
+router.patch('/:id/state', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { state } = req.body as { state: string };
+
+  if (!MANUAL_STATES.includes(state as (typeof MANUAL_STATES)[number])) {
+    return res.status(400).json({ error: `Invalid state. Allowed: ${MANUAL_STATES.join(', ')}` });
+  }
+
+  const incident = store.getIncident(id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const prevState = incident.state;
+  store.updateIncident(id, {
+    state: state as any,
+    actionHistory: [
+      ...incident.actionHistory,
+      {
+        action: `STATE_CHANGE_${state}`,
+        executedAt: new Date(),
+        result: `State changed from ${prevState} to ${state}`,
+        approvedBy: 'Support',
+      },
+    ],
+  });
+
+  store.pushTimelineEvent(id, {
+    step: 'Approval',
+    trigger: 'Manual',
+    action: `State changed to ${state}`,
+    details: `Support manually changed state from ${prevState} to ${state}`,
+  });
+
+  res.json({ success: true, prevState, newState: state });
+});
+
+/**
+ * POST /api/incidents/:id/timeline
+ * Add an arbitrary timeline entry from the frontend.
+ * Body: { step, trigger, action, details }
+ */
+router.post('/:id/timeline', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { step, trigger, action, details } = req.body as {
+    step: string; trigger: string; action: string; details: string;
+  };
+
+  const incident = store.getIncident(id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  store.pushTimelineEvent(id, {
+    step: step as any,
+    trigger: trigger as any,
+    action,
+    details,
+  });
+
+  res.json({ success: true });
 });
 
 export default router;

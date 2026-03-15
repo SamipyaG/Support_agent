@@ -60,6 +60,23 @@
         </div>
       </div>
 
+      <!-- State change dropdown -->
+      <div v-if="store.selectedIncident" class="hdr-info-wrap" ref="stateWrapRef">
+        <button class="hdr-info-btn hdr-state-btn" @click="showStateDropdown = !showStateDropdown">
+          ⬡ State <span class="hdr-chevron" :class="{ rotated: showStateDropdown }">▾</span>
+        </button>
+        <div v-if="showStateDropdown" class="hdr-info-dropdown hdr-state-dropdown">
+          <div class="hdr-state-title">Change State</div>
+          <button
+            v-for="s in ['NEW', 'ANALYZING', 'ESCALATED', 'RESOLVED']"
+            :key="s"
+            class="hdr-state-option"
+            :class="{ active: store.selectedIncident.state === s }"
+            @click="changeState(s)"
+          >{{ s.replace(/_/g, ' ') }}</button>
+        </div>
+      </div>
+
       <!-- Redis health button (top-right, near refresh) -->
       <div v-if="store.selectedIncident" class="hdr-redis-wrap" ref="redisWrapRef">
         <button
@@ -192,8 +209,24 @@
         <div class="detail-left">
           <div class="info-card chat-card">
             <div class="info-title">Customer Message</div>
+
+            <!-- AI Message Approval Popup -->
+            <div v-if="pendingAIMessage" class="msg-approval-popup">
+              <div class="msg-approval-header">
+                <span class="msg-approval-label">AI Suggested Message</span>
+                <span class="msg-approval-timer" :class="{ urgent: approvalCountdown <= 10 }">
+                  {{ approvalCountdown }}s
+                </span>
+              </div>
+              <div class="msg-approval-text">{{ pendingAIMessage }}</div>
+              <div class="msg-approval-actions">
+                <button class="msg-approval-btn accept" @click="acceptAIMessage">Accept</button>
+                <button class="msg-approval-btn reject" @click="rejectAIMessage">Reject</button>
+              </div>
+            </div>
+
             <div class="chat-messages" ref="chatMessagesRef">
-              <div v-if="chatMessages.length === 0 && !chatLoading" class="chat-empty">
+              <div v-if="chatMessages.length === 0 && !chatLoading && !pendingAIMessage" class="chat-empty">
                 Ask AI for a suggested message to send to the customer based on the current incident state.
               </div>
               <div
@@ -394,6 +427,22 @@ const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '1
 const logAnalyses = ref<LogAnalysis[]>([]);
 const activeRightTab = ref<'timeline' | 'logs'>('timeline');
 
+// ── Customer message approval popup ───────────────
+const pendingAIMessage = ref<string | null>(null);
+const approvalCountdown = ref(0);
+let approvalCountdownInterval: ReturnType<typeof setInterval> | null = null;
+const baseChannelTimer = parseInt(import.meta.env.VITE_BASE_CHANNEL_TIMER || '30', 10);
+
+// Smart timer: base * number of active incidents (min 1)
+const smartApprovalTimeout = computed(() => {
+  const count = Math.max(1, store.activeIncidents.length);
+  return baseChannelTimer * count;
+});
+
+// ── State change dropdown ──────────────────────────
+const showStateDropdown = ref(false);
+const stateWrapRef = ref<HTMLElement | null>(null);
+
 const showTrafficModal = ref(false);
 
 // Maps recommendedAction → correct human-readable explanation (prevents backend mismatch)
@@ -443,6 +492,9 @@ function onClickOutside(e: MouseEvent): void {
   }
   if (restartWrapRef.value && !restartWrapRef.value.contains(e.target as Node)) {
     showRestartPanel.value = false;
+  }
+  if (stateWrapRef.value && !stateWrapRef.value.contains(e.target as Node)) {
+    showStateDropdown.value = false;
   }
 }
 
@@ -579,6 +631,115 @@ async function refresh(): Promise<void> {
   await store.fetchIncidentById(route.params.id as string);
 }
 
+// ── State change ──────────────────────────────────────────────────────────────
+async function changeState(newState: string): Promise<void> {
+  const incidentId = route.params.id as string;
+  showStateDropdown.value = false;
+  try {
+    await api.patch(`/incidents/${incidentId}/state`, { state: newState });
+    await refresh();
+    // Add an internal note to chat
+    const stateNote = `[State changed to ${newState.replace(/_/g, ' ')}]`;
+    chatMessages.value.push({ role: 'assistant', content: stateNote });
+    store.saveChatHistory(incidentId, chatMessages.value);
+    await nextTick();
+    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    // Generate appropriate customer message for this state via AI
+    chatLoading.value = true;
+    try {
+      const res = await api.post(`/incidents/${incidentId}/chat`, {
+        messages: [
+          ...chatMessages.value,
+          {
+            role: 'user',
+            content: `The incident state has just been manually changed to ${newState}. Generate the appropriate customer-facing message for this state. Follow the issue type workflow rules strictly — use source-specific language for SOURCE issues and G-Mana language for G-Mana issues.`,
+          },
+        ],
+      });
+      startApprovalCountdown(res.data.reply);
+    } catch {
+      // silently skip — chat is optional
+    } finally {
+      chatLoading.value = false;
+    }
+  } catch (err) {
+    toastShow('error', 'State change failed', (err as Error).message);
+  }
+}
+
+// ── Customer message approval popup ──────────────────────────────────────────
+function startApprovalCountdown(message: string): void {
+  clearApprovalCountdown();
+  pendingAIMessage.value = message;
+  approvalCountdown.value = smartApprovalTimeout.value;
+  approvalCountdownInterval = setInterval(() => {
+    approvalCountdown.value--;
+    if (approvalCountdown.value <= 0) {
+      handleApprovalTimeout();
+    }
+  }, 1000);
+}
+
+function clearApprovalCountdown(): void {
+  if (approvalCountdownInterval) {
+    clearInterval(approvalCountdownInterval);
+    approvalCountdownInterval = null;
+  }
+  pendingAIMessage.value = null;
+}
+
+async function acceptAIMessage(): Promise<void> {
+  const msg = pendingAIMessage.value;
+  if (!msg) return;
+  clearApprovalCountdown();
+  const incidentId = route.params.id as string;
+  // Auto-copy the accepted message to clipboard
+  try {
+    await navigator.clipboard.writeText(msg);
+    toastShow('info', 'Copied to clipboard', 'Message copied — ready to paste to the customer.');
+  } catch { /* clipboard API unavailable */ }
+  chatMessages.value.push({ role: 'assistant', content: msg });
+  store.saveChatHistory(incidentId, chatMessages.value);
+  await nextTick();
+  if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+  try {
+    await api.post(`/incidents/${incidentId}/timeline`, {
+      step: 'Notification', trigger: 'Manual',
+      action: 'Customer informed by support (Accepted)',
+      details: 'Support accepted AI-generated message and sent it to the customer.',
+    });
+  } catch { /* non-critical */ }
+}
+
+async function rejectAIMessage(): Promise<void> {
+  const msg = pendingAIMessage.value;
+  if (!msg) return;
+  clearApprovalCountdown();
+  const incidentId = route.params.id as string;
+  toastShow('info', 'Message rejected', 'The AI suggestion was discarded.');
+  try {
+    await api.post(`/incidents/${incidentId}/timeline`, {
+      step: 'Notification', trigger: 'Manual',
+      action: 'Support rejected automated message',
+      details: 'Support rejected the AI-generated customer message.',
+    });
+  } catch { /* non-critical */ }
+}
+
+async function handleApprovalTimeout(): Promise<void> {
+  clearApprovalCountdown();
+  const incidentId = route.params.id as string;
+  toastShow('warning', 'Support did not respond', 'No response to the message request — sending to Yoni.');
+  try {
+    await api.post(`/incidents/${incidentId}/timeline`, {
+      step: 'Notification', trigger: 'System',
+      action: 'Support did not respond',
+      details: 'Support did not respond to the AI message approval in time. Notifying Yoni.',
+    });
+  } catch { /* non-critical */ }
+}
+
+// ── Chat functions ─────────────────────────────────────────────────────────────
 async function sendChat(): Promise<void> {
   const text = chatInput.value.trim();
   if (!text || chatLoading.value) return;
@@ -589,10 +750,11 @@ async function sendChat(): Promise<void> {
     const res = await api.post(`/incidents/${route.params.id}/chat`, {
       messages: chatMessages.value,
     });
-    chatMessages.value.push({ role: 'assistant', content: res.data.reply });
+    // Show approval popup instead of directly pushing to chat
+    startApprovalCountdown(res.data.reply);
+    // Remove the user message from visible chat until accepted
+    chatMessages.value.pop();
     store.saveChatHistory(route.params.id as string, chatMessages.value);
-    await nextTick();
-    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
   } catch (err) {
     toastShow('error', 'Chat failed', (err as Error).message);
     chatMessages.value.pop();
@@ -616,10 +778,8 @@ async function initChat(): Promise<void> {
     const res = await api.post(`/incidents/${incidentId}/chat`, {
       messages: [{ role: 'user', content: 'Suggest the appropriate message to send to the customer right now based on the current incident status.' }],
     });
-    chatMessages.value = [{ role: 'assistant', content: res.data.reply }];
-    store.saveChatHistory(incidentId, chatMessages.value);
-    await nextTick();
-    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    // Show approval popup for initial message
+    startApprovalCountdown(res.data.reply);
   } catch {
     // silently skip — chat is optional
   } finally {
@@ -628,20 +788,21 @@ async function initChat(): Promise<void> {
 }
 
 async function sendFollowup(): Promise<void> {
-  if (chatLoading.value) return;
+  if (chatLoading.value || pendingAIMessage.value) return;
   const incidentId = route.params.id as string;
   chatLoading.value = true;
   try {
     const res = await api.post(`/incidents/${incidentId}/chat`, {
       messages: [
         ...chatMessages.value,
-        { role: 'user', content: 'Provide an updated follow-up message to send to the customer based on the latest incident status.' },
+        {
+          role: 'user',
+          content: 'Provide an updated follow-up message to send to the customer based on the latest incident status. If this is a SOURCE issue, focus only on source-related updates — do not use generic "Our team is analyzing" language.',
+        },
       ],
     });
-    chatMessages.value.push({ role: 'assistant', content: res.data.reply });
-    store.saveChatHistory(incidentId, chatMessages.value);
-    await nextTick();
-    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    // Show approval popup for follow-up too
+    startApprovalCountdown(res.data.reply);
   } catch {
     // silently skip — follow-up is optional
   } finally {
@@ -664,6 +825,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside);
   if (followupTimer) clearInterval(followupTimer);
+  clearApprovalCountdown();
 });
 </script>
 
@@ -858,6 +1020,53 @@ onUnmounted(() => {
 .btn-open-hls:hover { background: var(--accent); color: #fff; }
 .player-no-url { height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
+
+/* ── State change dropdown ────────────────────────── */
+.hdr-state-btn { border-color: rgba(168,85,247,.4); color: #a855f7; }
+.hdr-state-btn:hover { border-color: #a855f7; background: rgba(168,85,247,.08); color: #a855f7; }
+.hdr-state-dropdown { min-width: 160px; padding: 6px; }
+.hdr-state-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tx-3); padding: 4px 8px 6px; }
+.hdr-state-option {
+  display: block; width: 100%; text-align: left; background: transparent; border: none;
+  padding: 7px 10px; font-size: 12px; color: var(--tx-2); cursor: pointer;
+  border-radius: 5px; transition: all .12s;
+}
+.hdr-state-option:hover { background: var(--bg-hover); color: var(--tx-1); }
+.hdr-state-option.active { color: #a855f7; font-weight: 600; background: rgba(168,85,247,.08); }
+
+/* ── Customer message approval popup ─────────────── */
+.msg-approval-popup {
+  background: var(--bg-base); border: 1px solid var(--col-warn);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.msg-approval-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.msg-approval-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--col-warn);
+}
+.msg-approval-timer {
+  font-size: 12px; font-weight: 700; color: var(--col-warn);
+  font-variant-numeric: tabular-nums;
+}
+.msg-approval-timer.urgent { color: var(--col-err); animation: pulse-timer .6s ease-in-out infinite; }
+@keyframes pulse-timer { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.msg-approval-text {
+  font-size: 12px; color: var(--tx-1); line-height: 1.5;
+  white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+  background: var(--bg-card); border-radius: 5px; padding: 8px 10px;
+}
+.msg-approval-actions { display: flex; gap: 8px; }
+.msg-approval-btn {
+  flex: 1; padding: 6px 0; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid transparent; transition: all .15s;
+}
+.msg-approval-btn.accept { background: var(--col-ok-bg, rgba(34,197,94,.12)); border-color: var(--col-ok); color: var(--col-ok); }
+.msg-approval-btn.accept:hover { background: var(--col-ok); color: #fff; }
+.msg-approval-btn.reject { background: var(--col-err-bg); border-color: var(--col-err); color: var(--col-err); }
+.msg-approval-btn.reject:hover { background: var(--col-err); color: #fff; }
 
 /* ── AI Chat ─────────────────────────────────────── */
 .chat-card { display: flex; flex-direction: column; height: 100%; min-height: 280px; }
