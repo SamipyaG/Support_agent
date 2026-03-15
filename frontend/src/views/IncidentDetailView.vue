@@ -358,7 +358,6 @@ import HlsPlayer from '@/components/HlsPlayer.vue';
 import RestartWorkflow from '@/components/RestartWorkflow.vue';
 import LogAnalysisPanel from '@/components/LogAnalysisPanel.vue';
 import TrafficRedirectModal from '@/components/TrafficRedirectModal.vue';
-import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
 import type { LogAnalysis } from '@/api/restart';
 import api from '@/api/axios';
 
@@ -373,6 +372,8 @@ const chatMessages = ref<ChatMessage[]>([]);
 const chatInput = ref('');
 const chatLoading = ref(false);
 const chatMessagesRef = ref<HTMLElement | null>(null);
+const chatFollowupIntervalMs = parseInt(import.meta.env.VITE_CHAT_FOLLOWUP_INTERVAL_MS || '300000', 10);
+let followupTimer: ReturnType<typeof setInterval> | null = null;
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
 const logAnalyses = ref<LogAnalysis[]>([]);
 const activeRightTab = ref<'timeline' | 'logs'>('timeline');
@@ -530,63 +531,24 @@ const incidentDuration = computed((): string | null => {
 });
 
 async function handleApprove(incidentId: string): Promise<void> {
-  // Capture before submitApproval triggers a refetch (state/ref may change)
   const action = store.selectedIncident?.recommendedAction ?? '';
 
   if (action === 'MOVE_TO_SOURCE') {
-    await store.submitApproval(incidentId, 'approved');
     showTrafficModal.value = true;
     return;
   }
 
-  await store.submitApproval(incidentId, 'approved');
-
-  // Open the restart panel so user sees the same visual flow as clicking "Restart UH/CI" manually
+  // Open the restart panel and trigger exactly the same flow as clicking the button
   showRestartPanel.value = true;
+  await nextTick();
+
   if (action === 'RESTART_UH') {
-    await restartWorkflowRef.value?.triggerUH();
+    restartWorkflowRef.value?.triggerUH();
   } else if (action === 'RESTART_CI') {
-    await restartWorkflowRef.value?.triggerCI();
+    restartWorkflowRef.value?.triggerCI();
   }
 }
 
-async function runApprovalRestart(service: 'uh' | 'ci', incidentId: string): Promise<void> {
-  const isUH = service === 'uh';
-  const serviceName = isUH ? 'User Handler' : 'Cuemana In';
-  const label      = isUH ? 'UserHandler'   : 'CueMana-In';
-
-  toastShow('info', `${label} restart triggered`, 'Downloading logs for analysis…');
-  try {
-    const logs = isUH ? await fetchUHLogs(incidentId) : await fetchCILogs(incidentId);
-    downloadTextFile(logs.logs, `${service}-logs.txt`);
-
-    const analysis = analyzeLog(logs, serviceName);
-    onLogAnalyzed(serviceName, analysis);
-    activeRightTab.value = 'logs';
-
-    const errCount = analysis.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length;
-    if (errCount > 0) {
-      toastShow('error', `${label} logs: ${errCount} error${errCount !== 1 ? 's' : ''} detected`, 'See Logs tab for details.');
-    }
-
-    toastShow('info', `Restarting ${label}…`, 'Sending restart command to backend.');
-    const result = isUH ? await restartUH(incidentId) : await restartCI(incidentId);
-
-    if (result.success) {
-      toastShow('success', `${label} restarted successfully`, result.message || result.deploymentName);
-      // After UH restart succeeds, automatically restart CI after 90s countdown
-      if (isUH) {
-        toastShow('info', 'CI restart scheduled', 'CueMana-In will restart automatically in 90 seconds…');
-        await new Promise<void>(resolve => setTimeout(resolve, 90_000));
-        await runApprovalRestart('ci', incidentId);
-      }
-    } else {
-      toastShow('error', `${label} restart failed`, result.message);
-    }
-  } catch (err) {
-    toastShow('error', `${label} restart failed`, (err as Error).message);
-  }
-}
 
 async function handleReject(incidentId: string): Promise<void> {
   await store.submitApproval(incidentId, 'rejected');
@@ -645,6 +607,28 @@ async function initChat(): Promise<void> {
   }
 }
 
+async function sendFollowup(): Promise<void> {
+  if (chatLoading.value) return;
+  const incidentId = route.params.id as string;
+  chatLoading.value = true;
+  try {
+    const res = await api.post(`/incidents/${incidentId}/chat`, {
+      messages: [
+        ...chatMessages.value,
+        { role: 'user', content: 'Provide an updated follow-up message to send to the customer based on the latest incident status.' },
+      ],
+    });
+    chatMessages.value.push({ role: 'assistant', content: res.data.reply });
+    store.saveChatHistory(incidentId, chatMessages.value);
+    await nextTick();
+    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+  } catch {
+    // silently skip — follow-up is optional
+  } finally {
+    chatLoading.value = false;
+  }
+}
+
 function formatTime(ts: string): string {
   return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
@@ -653,11 +637,13 @@ onMounted(async () => {
   await refresh();
   redisStore.fetchRedis();
   document.addEventListener('click', onClickOutside);
-  initChat();
+  await initChat();
+  followupTimer = setInterval(() => sendFollowup(), chatFollowupIntervalMs);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside);
+  if (followupTimer) clearInterval(followupTimer);
 });
 </script>
 

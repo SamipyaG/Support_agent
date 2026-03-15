@@ -294,14 +294,17 @@ router.get('/:id/traffic/health', async (req: Request, res: Response) => {
  * incident state and the Source/G-Mana workflow logic.
  * Body: { messages: { role: 'user'|'assistant', content: string }[] }
  */
-/** Detect issue type using rootCauseAssumption from stream analysis; falls back to channel name suffix */
-function detectIssueType(incident: { channelName: string; streamAnalysis?: Record<string, unknown> }): 'source' | 'gmana' {
+/** Detect issue type using analyzerName from the alarm (e.g. "elpais-live Source" → source, "elpais-live Gmana" → gmana) */
+function detectIssueType(incident: { analyzerName?: string; channelName: string; streamAnalysis?: Record<string, unknown> }): 'source' | 'gmana' {
+  // Primary: analyzerName from the alarm API
+  if (incident.analyzerName) {
+    return incident.analyzerName.toLowerCase().includes('source') ? 'source' : 'gmana';
+  }
+  // Fallback: rootCauseAssumption from stream analysis
   const assumption = incident.streamAnalysis?.rootCauseAssumption as string | undefined;
   if (assumption === 'SOURCE_ISSUE') return 'source';
   if (assumption === 'GMANA_ISSUE') return 'gmana';
-  // Fallback: channel name ends with "Source" or "Gmana"
-  const lastWord = incident.channelName.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
-  return lastWord === 'source' ? 'source' : 'gmana';
+  return 'gmana';
 }
 
 /** Rule-based fallback when OpenAI is unavailable */
@@ -361,12 +364,13 @@ INCIDENT DETAILS:
 - Error Code: ${incident.errorCode || 'unknown'}
 - Recommended Action: ${incident.recommendedAction || 'none'}
 - Cluster: ${incident.clusterId || 'unknown'}
-- Issue Type (detected from channel name): ${issueLabel}
+- Analyzer Name: ${incident.analyzerName || 'unknown'}
+- Issue Type (detected from analyzer name): ${issueLabel}
 - Status Label: ${incident.statusLabel || ''}
 
 ISSUE TYPE DETECTION RULE:
-The channel name always ends with either "Gmana" (G-Mana issue) or "Source" (Source issue).
-This incident is a ${issueLabel} because the channel name ends with "${incident.channelName.trim().split(/\s+/).pop()}".
+The analyzer name contains either "Source" (Source issue) or "Gmana" (G-Mana issue).
+This incident is a ${issueLabel} because the analyzer name is "${incident.analyzerName || 'unknown'}".
 
 SOURCE ISSUE WORKFLOW — suggested messages by status:
 - NEW/ANALYZING: "Hi, The channel [Channel Name] appears down from the source side. Please check the source encoder/feed from your side."

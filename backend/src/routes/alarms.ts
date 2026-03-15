@@ -34,6 +34,7 @@ router.post('/manual', async (req: Request, res: Response) => {
   managerAgent.processAlarms([{
     dsUuid,
     channelName: 'Manual trigger',
+    analyzerName: 'Manual trigger',
     status: 'ON' as const,
     statusCode: 0,
     errorType: 'MANUAL_TRIGGER',

@@ -97,6 +97,7 @@ export interface Incident {
   _id: string;                    // Auto-generated UUID
   dsUuid: string;
   channelName: string;
+  analyzerName: string;
   clusterId: string;
   redisInstance: string;
   streamType: 'HLS' | 'DASH';

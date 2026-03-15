@@ -222,6 +222,7 @@ export class ManagerAgent {
       const created = store.createIncident({
         dsUuid: alarm.dsUuid,
         channelName: alarm.channelName,
+        analyzerName: alarm.analyzerName || '',
         redisInstance: details.redisKey,
         clusterId: details.clusterName,
         streamType: (streamUrls?.streamType as 'HLS' | 'DASH') || 'HLS',
@@ -385,6 +386,7 @@ export class ManagerAgent {
     const created = store.createIncident({
       dsUuid: alarm.dsUuid,
       channelName: streamUrls?.channelName || alarm.channelName,
+      analyzerName: alarm.analyzerName || '',
       clusterId: details.clusterName,
       redisInstance: details.redisKey,
       streamType: (streamUrls?.streamType as 'HLS' | 'DASH') || 'HLS',
@@ -503,6 +505,7 @@ export class ManagerAgent {
     const incident = existingIncident || store.createIncident({
       dsUuid: alarm.dsUuid,
       channelName: alarm.channelName,
+      analyzerName: alarm.analyzerName || '',
       clusterId: clusterName,
       redisInstance: redisKey,
       streamType: streamUrls.streamType as 'HLS' | 'DASH',
