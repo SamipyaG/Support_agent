@@ -140,6 +140,7 @@ export interface StreamDetails {
 export interface AlarmData {
   dsUuid: string;
   channelName: string;
+  analyzerName: string;     // e.g. "Skandha TV POC - SBS Gmana" or "elpais-agiletves-live Source"
   status: 'ON' | 'OFF';
   statusCode: number;
   errorType: string;        // alarmTemplateID
@@ -494,6 +495,7 @@ export class HubMonitorTool {
     return {
       dsUuid: raw.ds_uuid,
       channelName: raw.channelName,
+      analyzerName: raw.analyzerName ?? '',
       status: raw.status === 'ON' ? 'ON' : 'OFF',
       statusCode: raw.status_code,
       errorType: raw.alarmTemplateID,

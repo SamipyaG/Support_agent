@@ -294,9 +294,13 @@ router.get('/:id/traffic/health', async (req: Request, res: Response) => {
  * incident state and the Source/G-Mana workflow logic.
  * Body: { messages: { role: 'user'|'assistant', content: string }[] }
  */
-/** Detect issue type from channel name last word: "... Gmana" → gmana, "... Source" → source */
-function detectIssueType(channelName: string): 'source' | 'gmana' {
-  const lastWord = channelName.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+/** Detect issue type using rootCauseAssumption from stream analysis; falls back to channel name suffix */
+function detectIssueType(incident: { channelName: string; streamAnalysis?: Record<string, unknown> }): 'source' | 'gmana' {
+  const assumption = incident.streamAnalysis?.rootCauseAssumption as string | undefined;
+  if (assumption === 'SOURCE_ISSUE') return 'source';
+  if (assumption === 'GMANA_ISSUE') return 'gmana';
+  // Fallback: channel name ends with "Source" or "Gmana"
+  const lastWord = incident.channelName.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
   return lastWord === 'source' ? 'source' : 'gmana';
 }
 
@@ -344,7 +348,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     messages: { role: 'user' | 'assistant'; content: string }[];
   };
 
-  const issueType = detectIssueType(incident.channelName);
+  const issueType = detectIssueType(incident);
   const issueLabel = issueType === 'source' ? 'SOURCE ISSUE' : 'G-MANA ISSUE';
 
   const systemPrompt = `You are a customer support AI assistant for G-Mana, a video streaming platform.

@@ -122,6 +122,15 @@ export const useIncidentsStore = defineStore('incidents', () => {
   const total = ref(0);
   const currentPage = ref(1);
   const pendingApprovalId = ref<string | null>(null);
+  const chatHistories = ref<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>({});
+
+  function saveChatHistory(incidentId: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>): void {
+    chatHistories.value[incidentId] = [...messages];
+  }
+
+  function getChatHistory(incidentId: string): Array<{ role: 'user' | 'assistant'; content: string }> {
+    return chatHistories.value[incidentId] ?? [];
+  }
 
   const TERMINAL_STATES = ['RESOLVED', 'CLOSED', 'FAILED'];
   const hasInitialized = ref(false);
@@ -256,5 +265,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
     triggerManualAlarm,
     pollActiveIncidents,
     clearSelected,
+    saveChatHistory,
+    getChatHistory,
   };
 });

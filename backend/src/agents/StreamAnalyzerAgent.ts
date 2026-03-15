@@ -151,6 +151,59 @@ export class StreamAnalyzerAgent {
     confidenceScore: number;
     details: string;
   } {
+    // ── Primary signal: analyzerName from the alarm API ───────────────────────
+    // e.g. "Skandha TV POC - SBS Gmana"  → GMANA_ISSUE
+    //      "elpais-agiletves-live Source" → SOURCE_ISSUE
+    const analyzerLower = (alarm.analyzerName ?? '').toLowerCase();
+    if (analyzerLower.includes('gmana')) {
+      const confidence = this.calculateGmanaConfidence(alarm, gmana);
+      return {
+        rootCauseAssumption: 'GMANA_ISSUE',
+        severity: isVip ? 'critical' : 'high',
+        confidenceScore: Math.max(confidence, 85),
+        details:
+          `analyzerName "${alarm.analyzerName}" indicates a G-Mana issue. ` +
+          `Source status: ${source.hasError ? 'down' : 'healthy'}, ` +
+          `G-Mana status: ${gmana.hasError ? `errors (${gmana.errorType})` : 'healthy'}. ` +
+          `Pod restart likely needed.`,
+      };
+    }
+    if (analyzerLower.includes('source')) {
+      return {
+        rootCauseAssumption: 'SOURCE_ISSUE',
+        severity: isVip ? 'high' : 'medium',
+        confidenceScore: 95,
+        details:
+          `analyzerName "${alarm.analyzerName}" indicates a Source issue. ` +
+          `Do NOT restart G-Mana pods. Notify the customer to check the source encoder/feed.`,
+      };
+    }
+
+    // ── Secondary signal: analyzerName suffix (tighter match than .includes) ──
+    if (analyzerLower.endsWith('gmana')) {
+      const confidence = this.calculateGmanaConfidence(alarm, gmana);
+      return {
+        rootCauseAssumption: 'GMANA_ISSUE',
+        severity: isVip ? 'critical' : 'high',
+        confidenceScore: Math.max(confidence, 80),
+        details:
+          `analyzerName "${alarm.analyzerName}" ends with "Gmana", indicating a G-Mana issue. ` +
+          `G-Mana status: ${gmana.hasError ? `errors (${gmana.errorType})` : 'healthy'}. ` +
+          `Pod restart likely needed.`,
+      };
+    }
+    if (analyzerLower.endsWith('source')) {
+      return {
+        rootCauseAssumption: 'SOURCE_ISSUE',
+        severity: isVip ? 'high' : 'medium',
+        confidenceScore: 90,
+        details:
+          `analyzerName "${alarm.analyzerName}" ends with "Source", indicating a Source issue. ` +
+          `Do NOT restart G-Mana pods. Notify the customer to check the source encoder/feed.`,
+      };
+    }
+
+    // ── Fallback: actual stream health checks ─────────────────────────────────
     // Both streams down — likely network/CDN level issue
     if (source.hasError && gmana.hasError) {
       return {

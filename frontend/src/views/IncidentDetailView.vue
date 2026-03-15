@@ -534,8 +534,6 @@ async function handleApprove(incidentId: string): Promise<void> {
   const action = store.selectedIncident?.recommendedAction ?? '';
 
   if (action === 'MOVE_TO_SOURCE') {
-    // For traffic redirect, we need a percentage from the operator first.
-    // Submit approval to unblock the ManagerAgent, then show the redirect modal.
     await store.submitApproval(incidentId, 'approved');
     showTrafficModal.value = true;
     return;
@@ -543,13 +541,12 @@ async function handleApprove(incidentId: string): Promise<void> {
 
   await store.submitApproval(incidentId, 'approved');
 
-  // Run the same flow as clicking "Restart UH / Restart CI" in the dropdown,
-  // but call the APIs directly so we don't depend on the component ref which
-  // may be destroyed by Vue when the incident state changes after approval.
+  // Open the restart panel so user sees the same visual flow as clicking "Restart UH/CI" manually
+  showRestartPanel.value = true;
   if (action === 'RESTART_UH') {
-    await runApprovalRestart('uh', incidentId);
+    await restartWorkflowRef.value?.triggerUH();
   } else if (action === 'RESTART_CI') {
-    await runApprovalRestart('ci', incidentId);
+    await restartWorkflowRef.value?.triggerCI();
   }
 }
 
@@ -611,6 +608,7 @@ async function sendChat(): Promise<void> {
       messages: chatMessages.value,
     });
     chatMessages.value.push({ role: 'assistant', content: res.data.reply });
+    store.saveChatHistory(route.params.id as string, chatMessages.value);
     await nextTick();
     if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
   } catch (err) {
@@ -622,13 +620,22 @@ async function sendChat(): Promise<void> {
 }
 
 async function initChat(): Promise<void> {
-  if (chatMessages.value.length > 0) return;
+  const incidentId = route.params.id as string;
+  // Restore from store if history exists (survives navigation)
+  const cached = store.getChatHistory(incidentId);
+  if (cached.length > 0) {
+    chatMessages.value = cached;
+    await nextTick();
+    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    return;
+  }
   chatLoading.value = true;
   try {
-    const res = await api.post(`/incidents/${route.params.id}/chat`, {
+    const res = await api.post(`/incidents/${incidentId}/chat`, {
       messages: [{ role: 'user', content: 'Suggest the appropriate message to send to the customer right now based on the current incident status.' }],
     });
     chatMessages.value = [{ role: 'assistant', content: res.data.reply }];
+    store.saveChatHistory(incidentId, chatMessages.value);
     await nextTick();
     if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
   } catch {
