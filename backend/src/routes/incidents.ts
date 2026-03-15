@@ -166,4 +166,123 @@ router.post('/:id/restart/ci', async (req: Request, res: Response) => {
   }
 });
 
+// ── Traffic Redirect Routes ────────────────────────────────────────────────────
+
+/**
+ * POST /api/incidents/:id/traffic/redirect
+ * Redirect a percentage of traffic from G-Mana to the source stream.
+ * Body: { percentage: number (1-100) }
+ */
+router.post('/:id/traffic/redirect', async (req: Request, res: Response) => {
+  const incident = getIncidentOrFail(req.params.id, res);
+  if (!incident) return;
+
+  const { percentage } = req.body as { percentage: unknown };
+  const pct = Number(percentage);
+  if (!pct || pct < 1 || pct > 100) {
+    return res.status(400).json({ error: 'percentage must be a number between 1 and 100' });
+  }
+
+  try {
+    const result = await getHubMonitor(req).redirectTrafficToSource(
+      incident.dsUuid,
+      incident.channelName,
+      incident.sourcePlayerUrl,
+      pct,
+    );
+
+    store.updateIncident(incident._id, {
+      state: 'MONITORING',
+      statusLabel: `Traffic redirected to source (${pct}%) — monitoring G-Mana recovery`,
+      streamAnalysis: {
+        ...incident.streamAnalysis,
+        redirectActive: true,
+        redirectPercentage: pct,
+        redirectedAt: new Date().toISOString(),
+      },
+      actionHistory: [
+        ...incident.actionHistory,
+        {
+          action: 'REDIRECT_TRAFFIC',
+          executedAt: new Date(),
+          result: `${pct}% traffic redirected to source — ${result.message}`,
+          approvedBy: 'Manual',
+        },
+      ],
+    });
+
+    store.pushTimelineEvent(incident._id, {
+      step: 'Recovery', trigger: 'Manual', action: 'Traffic Redirected',
+      details: `${pct}% of traffic redirected to source stream — monitoring G-Mana health`,
+    });
+
+    res.json({ success: true, percentage: pct, message: result.message });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/incidents/:id/traffic/revert
+ * Restore traffic back to G-Mana once the stream has recovered.
+ */
+router.post('/:id/traffic/revert', async (req: Request, res: Response) => {
+  const incident = getIncidentOrFail(req.params.id, res);
+  if (!incident) return;
+
+  try {
+    const result = await getHubMonitor(req).revertTrafficToGMana(
+      incident.dsUuid,
+      incident.channelName,
+      incident.sourcePlayerUrl,
+    );
+
+    store.updateIncident(incident._id, {
+      state: 'RESOLVED',
+      statusLabel: 'G-Mana stream recovered — traffic restored to G-Mana',
+      resolvedAt: new Date(),
+      streamAnalysis: {
+        ...incident.streamAnalysis,
+        redirectActive: false,
+        revertedAt: new Date().toISOString(),
+      },
+      actionHistory: [
+        ...incident.actionHistory,
+        {
+          action: 'REVERT_TRAFFIC',
+          executedAt: new Date(),
+          result: result.message,
+          approvedBy: 'system',
+        },
+      ],
+    });
+
+    store.pushTimelineEvent(incident._id, {
+      step: 'Recovery', trigger: 'System', action: 'Traffic Reverted',
+      details: 'G-Mana stream recovered — traffic restored from source back to G-Mana',
+    });
+
+    res.json({ success: true, message: result.message });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * GET /api/incidents/:id/traffic/health
+ * Check whether the G-Mana alarm for this incident is still active.
+ * Returns { gmanaHealthy: boolean, alarmActive: boolean }
+ */
+router.get('/:id/traffic/health', async (req: Request, res: Response) => {
+  const incident = getIncidentOrFail(req.params.id, res);
+  if (!incident) return;
+
+  try {
+    const alarmActive = await getHubMonitor(req).isGManaAlarmActive(incident.dsUuid);
+    res.json({ gmanaHealthy: !alarmActive, alarmActive });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 export default router;

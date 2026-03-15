@@ -88,6 +88,7 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
 import type { RestartResult, LogAnalysis } from '@/api/restart';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
   incidentId: string;
@@ -98,6 +99,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'log-analyzed', service: string, analysis: LogAnalysis): void;
 }>();
+
+const { show: toastShow } = useToast();
 
 type ServiceState = 'idle' | 'fetching-logs' | 'restarting' | 'error';
 
@@ -145,7 +148,7 @@ const ciAnalysisSummary = computed(() => buildSummary(ciAnalysis.value));
 const ciAnalysisClass   = computed(() => buildSummaryClass(ciAnalysis.value));
 
 function startCountdown(): void {
-  countdown.value = 60;
+  countdown.value = 90;
   countdownTimer = setInterval(() => {
     countdown.value--;
     if (countdown.value <= 0) {
@@ -159,22 +162,32 @@ async function doRestartUH(): Promise<void> {
   uhError.value = '';
   uhAnalysis.value = null;
   uhState.value = 'fetching-logs';
+  toastShow('info', 'UserHandler restart triggered', 'Downloading logs for analysis…');
   try {
     const logs = await fetchUHLogs(props.incidentId);
     downloadTextFile(logs.logs, `uh-${props.dsUuid}-logs.txt`);
 
-    // Analyse logs and surface results before restarting
     uhAnalysis.value = analyzeLog(logs, 'User Handler');
     emit('log-analyzed', 'User Handler', uhAnalysis.value);
 
+    const errCount = uhAnalysis.value.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length;
+    if (errCount > 0) toastShow('error', `UserHandler logs: ${errCount} error${errCount !== 1 ? 's' : ''} detected`, 'See Logs tab for details.');
+
     uhState.value = 'restarting';
+    toastShow('info', 'Restarting UserHandler…', 'Sending restart command to backend.');
     uhResult.value = await restartUH(props.incidentId);
     uhState.value = 'idle';
 
-    if (uhResult.value.success) startCountdown();
+    if (uhResult.value.success) {
+      toastShow('success', 'UserHandler restarted successfully', uhResult.value.message || uhResult.value.deploymentName);
+      startCountdown();
+    } else {
+      toastShow('error', 'UserHandler restart failed', uhResult.value.message);
+    }
   } catch (err) {
     uhState.value = 'error';
     uhError.value = (err as Error).message;
+    toastShow('error', 'UserHandler restart failed', (err as Error).message);
   }
 }
 
@@ -182,24 +195,38 @@ async function doRestartCI(): Promise<void> {
   ciError.value = '';
   ciAnalysis.value = null;
   ciState.value = 'fetching-logs';
+  toastShow('info', 'CueMana-In restart triggered', 'Downloading logs for analysis…');
   try {
     const logs = await fetchCILogs(props.incidentId);
     downloadTextFile(logs.logs, `ci-${props.dsUuid}-logs.txt`);
 
-    // Analyse logs and surface results before restarting
     ciAnalysis.value = analyzeLog(logs, 'Cuemana In');
     emit('log-analyzed', 'Cuemana In', ciAnalysis.value);
 
+    const errCount = ciAnalysis.value.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length;
+    if (errCount > 0) toastShow('error', `CueMana-In logs: ${errCount} error${errCount !== 1 ? 's' : ''} detected`, 'See Logs tab for details.');
+
     ciState.value = 'restarting';
+    toastShow('info', 'Restarting CueMana-In…', 'Sending restart command to backend.');
     ciResult.value = await restartCI(props.incidentId);
     ciState.value = 'idle';
+
+    if (ciResult.value.success) {
+      toastShow('success', 'CueMana-In restarted successfully', ciResult.value.message || ciResult.value.deploymentName);
+    } else {
+      toastShow('error', 'CueMana-In restart failed', ciResult.value.message);
+    }
   } catch (err) {
     ciState.value = 'error';
     ciError.value = (err as Error).message;
+    toastShow('error', 'CueMana-In restart failed', (err as Error).message);
   }
 }
 
 onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer); });
+
+// Expose so the approval flow in IncidentDetailView can trigger the exact same path
+defineExpose({ triggerUH: doRestartUH, triggerCI: doRestartCI });
 </script>
 
 <style scoped>

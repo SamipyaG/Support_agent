@@ -44,12 +44,13 @@
           <button class="hdr-info-btn hdr-restart-btn" @click="showRestartPanel = !showRestartPanel">
             ↻ Restart <span class="hdr-chevron" :class="{ rotated: showRestartPanel }">▾</span>
           </button>
-          <div v-if="showRestartPanel" class="hdr-restart-dropdown">
+          <div v-show="showRestartPanel" class="hdr-restart-dropdown">
             <div class="hdr-restart-header">
               <span class="hdr-restart-title">Service Restart</span>
               <span class="hdr-restart-sub dim mono">{{ store.selectedIncident.clusterId }}</span>
             </div>
             <RestartWorkflow
+              ref="restartWorkflowRef"
               :incident-id="store.selectedIncident._id"
               :ds-uuid="store.selectedIncident.dsUuid"
               :cluster-id="store.selectedIncident.clusterId"
@@ -153,11 +154,37 @@
         v-if="store.selectedIncident.state === 'WAITING_APPROVAL'"
         :incident-id="store.selectedIncident._id"
         :proposed-action="store.selectedIncident.recommendedAction"
-        :explanation="store.selectedIncident.explanation"
+        :explanation="approvalExplanation"
         :timeout-seconds="approvalTimeout"
         @approve="handleApprove"
         @reject="handleReject"
       />
+
+      <!-- Traffic redirect modal (shown after MOVE_TO_SOURCE approval) -->
+      <TrafficRedirectModal
+        v-if="showTrafficModal && store.selectedIncident"
+        :incident-id="store.selectedIncident._id"
+        :channel-name="store.selectedIncident.channelName"
+        @close="showTrafficModal = false"
+        @redirected="showTrafficModal = false"
+        @reverted="showTrafficModal = false; refresh()"
+      />
+
+      <!-- Traffic-redirect active banner -->
+      <div
+        v-if="store.selectedIncident.streamAnalysis?.redirectActive"
+        class="redirect-banner"
+      >
+        <span class="redirect-banner-dot"></span>
+        <span class="redirect-banner-text">
+          Traffic redirected to source
+          <strong v-if="store.selectedIncident.streamAnalysis?.redirectPercentage">
+            ({{ store.selectedIncident.streamAnalysis.redirectPercentage }}%)
+          </strong>
+          — monitoring G-Mana recovery
+        </span>
+        <button class="redirect-banner-btn" @click="showTrafficModal = true">Manage</button>
+      </div>
 
       <!-- Incident overview -->
       <div class="detail-grid">
@@ -303,20 +330,37 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import { useRedisStore } from '@/store/redis';
+import { useToast } from '@/composables/useToast';
 import ApprovalTimer from '@/components/ApprovalTimer.vue';
 import HlsPlayer from '@/components/HlsPlayer.vue';
 import RestartWorkflow from '@/components/RestartWorkflow.vue';
 import LogAnalysisPanel from '@/components/LogAnalysisPanel.vue';
+import TrafficRedirectModal from '@/components/TrafficRedirectModal.vue';
+import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
 import type { LogAnalysis } from '@/api/restart';
 
 const route = useRoute();
 const store = useIncidentsStore();
 const redisStore = useRedisStore();
+const { show: toastShow } = useToast();
 
 const draftMessage = ref('');
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
 const logAnalyses = ref<LogAnalysis[]>([]);
 const activeRightTab = ref<'timeline' | 'logs'>('timeline');
+
+const showTrafficModal = ref(false);
+
+// Maps recommendedAction → correct human-readable explanation (prevents backend mismatch)
+const RESTART_EXPLANATIONS: Record<string, string> = {
+  RESTART_UH:    'UserHandler pod errors detected — restarting UserHandler.',
+  RESTART_CI:    'CueMana-In pod errors detected — restarting CueMana-In.',
+  MOVE_TO_SOURCE: 'G-Mana stream not recovering after all restart attempts. Proposing to redirect traffic to source stream.',
+};
+const approvalExplanation = computed((): string => {
+  const action = store.selectedIncident?.recommendedAction ?? '';
+  return RESTART_EXPLANATIONS[action] ?? (store.selectedIncident?.explanation ?? '');
+});
 
 const totalLogErrors = computed(() =>
   logAnalyses.value.reduce((s, a) => s + a.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length, 0),
@@ -336,6 +380,7 @@ const showInfoPanel = ref(false);
 const infoWrapRef = ref<HTMLElement | null>(null);
 const showRestartPanel = ref(false);
 const restartWrapRef = ref<HTMLElement | null>(null);
+const restartWorkflowRef = ref<InstanceType<typeof RestartWorkflow> | null>(null);
 
 function toggleRedisPanel(): void {
   showRedisPanel.value = !showRedisPanel.value;
@@ -457,11 +502,63 @@ const incidentDuration = computed((): string | null => {
 });
 
 async function handleApprove(incidentId: string): Promise<void> {
+  // Capture before submitApproval triggers a refetch (state/ref may change)
+  const action = store.selectedIncident?.recommendedAction ?? '';
+
+  if (action === 'MOVE_TO_SOURCE') {
+    // For traffic redirect, we need a percentage from the operator first.
+    // Submit approval to unblock the ManagerAgent, then show the redirect modal.
+    await store.submitApproval(incidentId, 'approved');
+    showTrafficModal.value = true;
+    return;
+  }
+
   await store.submitApproval(incidentId, 'approved');
+
+  // Run the same flow as clicking "Restart UH / Restart CI" in the dropdown,
+  // but call the APIs directly so we don't depend on the component ref which
+  // may be destroyed by Vue when the incident state changes after approval.
+  if (action === 'RESTART_UH') {
+    await runApprovalRestart('uh', incidentId);
+  } else if (action === 'RESTART_CI') {
+    await runApprovalRestart('ci', incidentId);
+  }
+}
+
+async function runApprovalRestart(service: 'uh' | 'ci', incidentId: string): Promise<void> {
+  const isUH = service === 'uh';
+  const serviceName = isUH ? 'User Handler' : 'Cuemana In';
+  const label      = isUH ? 'UserHandler'   : 'CueMana-In';
+
+  toastShow('info', `${label} restart triggered`, 'Downloading logs for analysis…');
+  try {
+    const logs = isUH ? await fetchUHLogs(incidentId) : await fetchCILogs(incidentId);
+    downloadTextFile(logs.logs, `${service}-logs.txt`);
+
+    const analysis = analyzeLog(logs, serviceName);
+    onLogAnalyzed(serviceName, analysis);
+
+    const errCount = analysis.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length;
+    if (errCount > 0) {
+      toastShow('error', `${label} logs: ${errCount} error${errCount !== 1 ? 's' : ''} detected`, 'See Logs tab for details.');
+    }
+
+    toastShow('info', `Restarting ${label}…`, 'Sending restart command to backend.');
+    const result = isUH ? await restartUH(incidentId) : await restartCI(incidentId);
+
+    if (result.success) {
+      toastShow('success', `${label} restarted successfully`, result.message || result.deploymentName);
+    } else {
+      toastShow('error', `${label} restart failed`, result.message);
+    }
+  } catch (err) {
+    toastShow('error', `${label} restart failed`, (err as Error).message);
+  }
 }
 
 async function handleReject(incidentId: string): Promise<void> {
   await store.submitApproval(incidentId, 'rejected');
+  toastShow('info', 'Action rejected', 'Restart has been cancelled and escalation will proceed.');
 }
 
 async function refresh(): Promise<void> {
@@ -814,4 +911,29 @@ onUnmounted(() => {
   background: rgba(63,185,80,.12); color: #3fb950;
   border: 1px solid rgba(63,185,80,.25);
 }
+
+/* ── Traffic redirect active banner ──────────────── */
+.redirect-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: rgba(227, 162, 58, .08);
+  border: 1px solid rgba(227, 162, 58, .35);
+  border-radius: 8px;
+}
+.redirect-banner-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #e3a23a; flex-shrink: 0;
+  animation: rb-pulse 1.4s ease-in-out infinite;
+}
+@keyframes rb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.redirect-banner-text { flex: 1; font-size: 12px; color: #e3a23a; }
+.redirect-banner-text strong { font-weight: 700; }
+.redirect-banner-btn {
+  background: rgba(227, 162, 58, .12); border: 1px solid rgba(227, 162, 58, .4);
+  color: #e3a23a; font-size: 11px; font-weight: 600;
+  padding: 4px 12px; border-radius: 5px; cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.redirect-banner-btn:hover { background: rgba(227, 162, 58, .22); }
 </style>
