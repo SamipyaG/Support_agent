@@ -330,13 +330,29 @@
         <div class="info-title">Stream Players</div>
         <div class="players-grid">
           <div class="player-embed">
-            <div class="player-embed-label source">Source</div>
+            <div class="player-embed-header">
+              <div class="player-embed-label source">Source</div>
+              <button
+                v-if="store.selectedIncident.sourcePlayerUrl"
+                class="btn-open-hls"
+                @click="openInHls(store.selectedIncident.sourcePlayerUrl)"
+                title="Open in HLS Player extension"
+              >▶ Open in HLS</button>
+            </div>
             <HlsPlayer v-if="store.selectedIncident.sourcePlayerUrl" :src="store.selectedIncident.sourcePlayerUrl" />
             <div v-else class="player-no-url">No source URL</div>
             <span class="player-url-small">{{ store.selectedIncident.sourcePlayerUrl || '' }}</span>
           </div>
           <div class="player-embed">
-            <div class="player-embed-label gmana">G-Mana</div>
+            <div class="player-embed-header">
+              <div class="player-embed-label gmana">G-Mana</div>
+              <button
+                v-if="store.selectedIncident.gManaPlayerUrl"
+                class="btn-open-hls"
+                @click="openInHls(store.selectedIncident.gManaPlayerUrl)"
+                title="Open in HLS Player extension"
+              >▶ Open in HLS</button>
+            </div>
             <HlsPlayer v-if="store.selectedIncident.gManaPlayerUrl" :src="store.selectedIncident.gManaPlayerUrl" />
             <div v-else class="player-no-url">No G-Mana URL</div>
             <span class="player-url-small">{{ store.selectedIncident.gManaPlayerUrl || '' }}</span>
@@ -553,6 +569,10 @@ async function handleApprove(incidentId: string): Promise<void> {
 async function handleReject(incidentId: string): Promise<void> {
   await store.submitApproval(incidentId, 'rejected');
   toastShow('info', 'Action rejected', 'Restart has been cancelled and escalation will proceed.');
+}
+
+function openInHls(url: string): void {
+  window.open(url, '_blank');
 }
 
 async function refresh(): Promise<void> {
@@ -828,7 +848,14 @@ onUnmounted(() => {
 .players-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 700px) { .players-grid { grid-template-columns: 1fr; } }
 .player-embed { display: flex; flex-direction: column; gap: 5px; }
+.player-embed-header { display: flex; align-items: center; justify-content: space-between; }
 .player-embed-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tx-3); }
+.btn-open-hls {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+  background: var(--accent-bg); border: 1px solid var(--accent); color: var(--accent);
+  transition: all .15s;
+}
+.btn-open-hls:hover { background: var(--accent); color: #fff; }
 .player-no-url { height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
 
