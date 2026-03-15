@@ -5,11 +5,7 @@
       <button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Expand' : 'Collapse'">
         {{ sidebarCollapsed ? '›' : '‹' }}
       </button>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <div v-for="item in panels" :key="item.id"
         class="nav-item"
         :class="{ active: activePanel === item.id }"
@@ -21,11 +17,7 @@
         <span v-if="!sidebarCollapsed && statusMap[item.id]" class="nav-status" :class="statusMap[item.id]"></span>
       </div>
     </nav>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
     <!-- Main content -->
     <main class="mon-main">
       <div class="mon-header">
@@ -37,32 +29,20 @@
           ↻ Refresh
         </button>
       </div>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Loading -->
       <div v-if="loading" class="mon-state">
         <div class="spinner"></div>
         <span>Fetching data…</span>
       </div>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Error -->
       <div v-else-if="error" class="mon-state error">
         <span class="err-icon">⚠</span>
         <span>{{ error }}</span>
         <button class="btn-retry" @click="fetchData">Retry</button>
       </div>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- OpenSearch -->
       <template v-else-if="activePanel === 'opensearch' && data">
         <div class="cards-grid">
@@ -76,11 +56,7 @@
           <MonTable :rows="data.indices" :formatters="indexFormatters" />
         </template>
       </template>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Logstash -->
       <template v-else-if="activePanel === 'logstash' && data">
         <div class="cards-grid" v-if="data.status || data.jvm || data.process">
@@ -100,11 +76,7 @@
           <pre class="json-dump">{{ JSON.stringify(data, null, 2) }}</pre>
         </template>
       </template>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Pending Pods -->
       <template v-else-if="activePanel === 'pending-pods' && data">
         <div v-if="podRows.length === 0" class="mon-state ok">
@@ -115,20 +87,12 @@
           <MonTable :rows="podRows" :formatters="podFormatters" />
         </template>
       </template>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Components -->
       <template v-else-if="activePanel === 'components' && data">
         <MonTable :rows="componentRows" :formatters="componentFormatters" />
       </template>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Coherency -->
       <template v-else-if="activePanel === 'coherency' && data">
         <div v-if="coherencyRows.length === 0" class="mon-state ok">
@@ -138,11 +102,7 @@
           <MonTable :rows="coherencyRows" :formatters="coherencyFormatters" />
         </template>
       </template>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
       <!-- Fallback generic renderer -->
       <template v-else-if="data">
         <template v-if="Array.isArray(data)">
@@ -160,17 +120,10 @@
     </main>
   </div>
 </template>
-<<<<<<< HEAD
 
 <script setup lang="ts">
 import { ref, computed, onMounted, defineComponent, h } from 'vue';
 
-=======
- 
-<script setup lang="ts">
-import { ref, computed, onMounted, defineComponent, h } from 'vue';
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Inline MonTable component ─────────────────────────── */
 const MonTable = defineComponent({
   props: {
@@ -180,21 +133,13 @@ const MonTable = defineComponent({
   setup(props) {
     const sortKey = ref('');
     const sortDir = ref<1 | -1>(1);
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
     const headers = computed(() => {
       const set = new Set<string>();
       props.rows.forEach((r) => Object.keys(r).forEach((k) => set.add(k)));
       return Array.from(set);
     });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
     const sorted = computed(() => {
       if (!sortKey.value) return props.rows;
       return [...props.rows].sort((a, b) => {
@@ -203,28 +148,16 @@ const MonTable = defineComponent({
         return String(av).localeCompare(String(bv), undefined, { numeric: true }) * sortDir.value;
       });
     });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
     function toggle(key: string) {
       if (sortKey.value === key) sortDir.value = sortDir.value === 1 ? -1 : 1;
       else { sortKey.value = key; sortDir.value = 1; }
     }
-<<<<<<< HEAD
 
     function fmtHeader(k: string) {
       return k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
     }
 
-=======
- 
-    function fmtHeader(k: string) {
-      return k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
-    }
- 
->>>>>>> ca6b98a (resolve conflict)
     return () => {
       if (!props.rows.length) return h('div', { class: 'empty-table' }, 'No data');
       return h('div', { class: 'table-wrap' },
@@ -249,11 +182,7 @@ const MonTable = defineComponent({
     };
   },
 });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Panel config ──────────────────────────────────────── */
 const panels = [
   { id: 'opensearch',    label: 'OpenSearch',    icon: '🔍', url: 'https://hub-monitor.g-mana.live/sendalarms/opensearch' },
@@ -262,7 +191,6 @@ const panels = [
   { id: 'components',    label: 'Components',    icon: '🧩', url: 'https://hub-monitor.g-mana.live/sendalarms/clusters/hub1x/components' },
   { id: 'coherency',     label: 'Coherency',     icon: '🔗', url: 'https://hub-monitor.g-mana.live/sendalarms/clusters/hub1x/configuration-coherency' },
 ];
-<<<<<<< HEAD
 
 /* ── State ─────────────────────────────────────────────── */
 const activePanel   = ref('opensearch');
@@ -270,32 +198,16 @@ const sidebarCollapsed = ref(false);
 // API response shape is fully dynamic — use any for template property access
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const data = ref<any>(null);
-=======
- 
-/* ── State ─────────────────────────────────────────────── */
-const activePanel   = ref('opensearch');
-const sidebarCollapsed = ref(false);
-const data          = ref<unknown>(null);
->>>>>>> ca6b98a (resolve conflict)
 const loading       = ref(false);
 const error         = ref('');
 const lastUpdated   = ref('');
 const statusMap     = ref<Record<string, string>>({});
-<<<<<<< HEAD
 
 const currentPanel = computed(() => panels.find(p => p.id === activePanel.value)!);
 
 /* ── Fetch ─────────────────────────────────────────────── */
 const API_KEY = import.meta.env.VITE_HUB_MONITOR_API_KEY as string;
 
-=======
- 
-const currentPanel = computed(() => panels.find(p => p.id === activePanel.value)!);
- 
-/* ── Fetch ─────────────────────────────────────────────── */
-const API_KEY = import.meta.env.VITE_HUB_MONITOR_API_KEY as string;
- 
->>>>>>> ca6b98a (resolve conflict)
 async function fetchData() {
   loading.value = true;
   error.value = '';
@@ -314,20 +226,12 @@ async function fetchData() {
     loading.value = false;
   }
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function selectPanel(id: string) {
   activePanel.value = id;
   fetchData();
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function updateStatusMap() {
   const id = activePanel.value;
   if (id === 'pending-pods') {
@@ -344,24 +248,14 @@ function updateStatusMap() {
     statusMap.value[id] = 'ok';
   }
 }
-<<<<<<< HEAD
 
 onMounted(() => fetchData());
 
-=======
- 
-onMounted(() => fetchData());
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Helpers ───────────────────────────────────────────── */
 function formatKey(k: string): string {
   return k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase()).trim();
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function formatBytes(bytes: number): string {
   if (bytes == null || isNaN(bytes)) return '—';
   if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
@@ -369,22 +263,14 @@ function formatBytes(bytes: number): string {
   if (bytes >= 1024)       return (bytes / 1024).toFixed(1) + ' KB';
   return bytes + ' B';
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function formatCpu(val: unknown): string {
   if (val == null) return '—';
   const n = parseFloat(String(val));
   if (isNaN(n)) return String(val);
   return n.toFixed(1) + '%';
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function formatVal(key: string, val: unknown): string {
   if (val == null) return '—';
   const lk = key.toLowerCase();
@@ -399,11 +285,7 @@ function formatVal(key: string, val: unknown): string {
   if (typeof val === 'object') return JSON.stringify(val);
   return String(val);
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function statusClass(key: string, val: unknown): string {
   const lk = key.toLowerCase();
   const sv = String(val).toLowerCase();
@@ -414,11 +296,7 @@ function statusClass(key: string, val: unknown): string {
   }
   return '';
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 function flattenTop(obj: unknown): Record<string, unknown> {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return {};
   const out: Record<string, unknown> = {};
@@ -427,22 +305,14 @@ function flattenTop(obj: unknown): Record<string, unknown> {
   }
   return out;
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── OpenSearch formatters ─────────────────────────────── */
 const indexFormatters = {
   health: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   status: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   'store.size': (v: unknown) => h('span', { class: 'cell-text' }, formatVal('size', v)),
 };
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Logstash ──────────────────────────────────────────── */
 const logstashSummary = computed(() => {
   const d = data.value as Record<string, unknown> | null;
@@ -463,11 +333,7 @@ const logstashSummary = computed(() => {
   if (d.version) out.version = d.version;
   return out;
 });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 const pipelines = computed(() => {
   const d = data.value as Record<string, unknown> | null;
   if (!d?.pipelines) return [];
@@ -485,29 +351,17 @@ const pipelines = computed(() => {
     };
   });
 });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 const logstashFormatters = {
   status: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   memory: (v: unknown) => h('span', { class: 'cell-text' }, formatBytes(parseFloat(String(v)))),
   cpu: (v: unknown) => h('span', { class: 'cell-text' }, formatCpu(v)),
 };
-<<<<<<< HEAD
 
 const pipelineFormatters = {
   duration_ms: (v: unknown) => h('span', { class: 'cell-text' }, v != null ? Number(v).toLocaleString() + ' ms' : '—'),
 };
 
-=======
- 
-const pipelineFormatters = {
-  duration_ms: (v: unknown) => h('span', { class: 'cell-text' }, v != null ? Number(v).toLocaleString() + ' ms' : '—'),
-};
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Pending Pods ──────────────────────────────────────── */
 function getPodRows(): Record<string, unknown>[] {
   const d = data.value;
@@ -520,25 +374,15 @@ function getPodRows(): Record<string, unknown>[] {
   }
   return [];
 }
-<<<<<<< HEAD
 
 const podRows = computed(() => getPodRows());
 
-=======
- 
-const podRows = computed(() => getPodRows());
- 
->>>>>>> ca6b98a (resolve conflict)
 const podFormatters = {
   status: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   phase: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   age: (v: unknown) => h('span', { class: 'cell-mono' }, String(v ?? '—')),
 };
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Components ────────────────────────────────────────── */
 const componentRows = computed(() => {
   const d = data.value;
@@ -550,11 +394,7 @@ const componentRows = computed(() => {
   }
   return [];
 });
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 const componentFormatters = {
   status: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   health: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
@@ -564,11 +404,7 @@ const componentFormatters = {
   cpu: (v: unknown) => h('span', { class: 'cell-text' }, formatCpu(v)),
   cpuUsage: (v: unknown) => h('span', { class: 'cell-text' }, formatCpu(v)),
 };
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Coherency ─────────────────────────────────────────── */
 function getCoherencyRows(): Record<string, unknown>[] {
   const d = data.value;
@@ -589,26 +425,16 @@ function getCoherencyRows(): Record<string, unknown>[] {
   }
   return [];
 }
-<<<<<<< HEAD
 
 const coherencyRows = computed(() => getCoherencyRows());
 
-=======
- 
-const coherencyRows = computed(() => getCoherencyRows());
- 
->>>>>>> ca6b98a (resolve conflict)
 const coherencyFormatters = {
   status: (v: unknown) => h('span', { class: `badge-status ${statusClass('status', v)}` }, String(v ?? '—')),
   coherent: (v: unknown) => h('span', { class: `badge-status ${v ? 'val-ok' : 'val-err'}` }, v ? '✓ Yes' : '✗ No'),
   match: (v: unknown) => h('span', { class: `badge-status ${v ? 'val-ok' : 'val-err'}` }, v ? '✓ Match' : '✗ Mismatch'),
 };
 </script>
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 <style scoped>
 /* ── Layout ──────────────────────────────────────────── */
 .mon-layout {
@@ -617,11 +443,7 @@ const coherencyFormatters = {
   background: var(--bg-base);
   overflow: hidden;
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Sidebar ─────────────────────────────────────────── */
 .mon-sidebar {
   width: 200px;
@@ -636,11 +458,7 @@ const coherencyFormatters = {
   overflow: hidden;
 }
 .mon-sidebar.collapsed { width: 48px; }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .collapse-btn {
   align-self: flex-end;
   background: none;
@@ -655,11 +473,7 @@ const coherencyFormatters = {
   flex-shrink: 0;
 }
 .collapse-btn:hover { background: var(--bg-hover); color: var(--tx-1); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .nav-item {
   display: flex;
   align-items: center;
@@ -677,11 +491,7 @@ const coherencyFormatters = {
 }
 .nav-item:hover { background: var(--bg-hover); color: var(--tx-1); }
 .nav-item.active { background: var(--accent-bg); color: var(--accent); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .nav-icon { font-size: 15px; flex-shrink: 0; }
 .nav-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .nav-status {
@@ -690,11 +500,7 @@ const coherencyFormatters = {
 .nav-status.ok   { background: var(--col-ok); }
 .nav-status.warn { background: var(--col-warn); }
 .nav-status.err  { background: var(--col-err); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Main ────────────────────────────────────────────── */
 .mon-main {
   flex: 1;
@@ -705,11 +511,7 @@ const coherencyFormatters = {
   gap: 16px;
   min-width: 0;
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .mon-header {
   display: flex;
   align-items: center;
@@ -719,11 +521,7 @@ const coherencyFormatters = {
 .mon-title-row { display: flex; align-items: baseline; gap: 12px; }
 .mon-title { font-size: 16px; font-weight: 600; }
 .mon-updated { font-size: 11px; color: var(--tx-3); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .btn-refresh {
   display: flex; align-items: center; gap: 6px;
   background: var(--bg-card); border: 1px solid var(--bd);
@@ -734,21 +532,13 @@ const coherencyFormatters = {
 .btn-refresh:disabled { opacity: .5; cursor: default; }
 .btn-refresh.spinning { animation: spin .6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .btn-retry {
   background: var(--col-err-bg); border: 1px solid var(--col-err);
   color: var(--col-err); padding: 4px 12px; border-radius: 5px;
   font-size: 11px; cursor: pointer;
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── States ──────────────────────────────────────────── */
 .mon-state {
   display: flex; align-items: center; gap: 12px;
@@ -757,11 +547,7 @@ const coherencyFormatters = {
 .mon-state.error { color: var(--col-err); }
 .mon-state.ok { color: var(--col-ok); }
 .err-icon { font-size: 18px; }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 .spinner {
   width: 20px; height: 20px;
   border: 2px solid var(--bd);
@@ -769,11 +555,7 @@ const coherencyFormatters = {
   border-radius: 50%;
   animation: spin .7s linear infinite;
 }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Cards grid (summary stats) ──────────────────────── */
 .cards-grid {
   display: grid;
@@ -791,11 +573,7 @@ const coherencyFormatters = {
 .val-ok   { color: var(--col-ok); }
 .val-warn { color: var(--col-warn); }
 .val-err  { color: var(--col-err); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Section ─────────────────────────────────────────── */
 .section-title { font-size: 11px; font-weight: 600; color: var(--tx-3); text-transform: uppercase; letter-spacing: .06em; }
 .section-badge {
@@ -804,11 +582,7 @@ const coherencyFormatters = {
   padding: 3px 10px; border-radius: 20px;
 }
 .section-badge.red { background: var(--col-err-bg); color: var(--col-err); border: 1px solid rgba(248,81,73,.25); }
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
 /* ── Table (rendered by MonTable) ────────────────────── */
 :deep(.table-wrap) {
   overflow-x: auto;
@@ -844,17 +618,10 @@ const coherencyFormatters = {
 }
 :deep(.mon-table tr:last-child td) { border-bottom: none; }
 :deep(.mon-table tr:hover td) { background: var(--bg-hover) !important; }
-<<<<<<< HEAD
 
 :deep(.cell-text) { color: var(--tx-1); }
 :deep(.cell-mono) { font-family: monospace; font-size: 11px; color: var(--tx-2); }
 
-=======
- 
-:deep(.cell-text) { color: var(--tx-1); }
-:deep(.cell-mono) { font-family: monospace; font-size: 11px; color: var(--tx-2); }
- 
->>>>>>> ca6b98a (resolve conflict)
 :deep(.badge-status) {
   display: inline-block;
   padding: 2px 8px; border-radius: 4px;
@@ -864,15 +631,9 @@ const coherencyFormatters = {
 :deep(.badge-status.val-warn) { background: var(--col-warn-bg); color: var(--col-warn); }
 :deep(.badge-status.val-err)  { background: var(--col-err-bg); color: var(--col-err); }
 :deep(.badge-status:not(.val-ok):not(.val-warn):not(.val-err)) { background: var(--bd-sub); color: var(--tx-2); }
-<<<<<<< HEAD
 
 :deep(.empty-table) { padding: 24px; color: var(--tx-3); text-align: center; font-size: 12px; }
 
-=======
- 
-:deep(.empty-table) { padding: 24px; color: var(--tx-3); text-align: center; font-size: 12px; }
- 
->>>>>>> ca6b98a (resolve conflict)
 .json-dump {
   background: var(--bg-card);
   border: 1px solid var(--bd);
@@ -885,7 +646,3 @@ const coherencyFormatters = {
   max-height: 500px;
 }
 </style>
-<<<<<<< HEAD
-=======
- 
->>>>>>> ca6b98a (resolve conflict)
