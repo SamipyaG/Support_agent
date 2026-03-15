@@ -188,15 +188,37 @@
 
       <!-- Incident overview -->
       <div class="detail-grid">
-        <!-- Left: draft + stream message -->
+        <!-- Left: AI customer message chat -->
         <div class="detail-left">
-          <!-- Draft message -->
-          <div class="info-card">
-            <div class="info-title">Draft Customer Message</div>
-            <textarea class="draft-textarea" v-model="draftMessage" rows="4" placeholder="Edit draft message before sending..."></textarea>
-            <div class="draft-actions">
-              <button class="btn-secondary" @click="sendDraftEmail">📧 Send Email</button>
-              <button class="btn-secondary" @click="sendDraftWhatsApp">💬 Send WhatsApp</button>
+          <div class="info-card chat-card">
+            <div class="info-title">Customer Message</div>
+            <div class="chat-messages" ref="chatMessagesRef">
+              <div v-if="chatMessages.length === 0 && !chatLoading" class="chat-empty">
+                Ask AI for a suggested message to send to the customer based on the current incident state.
+              </div>
+              <div
+                v-for="(msg, i) in chatMessages"
+                :key="i"
+                class="chat-msg"
+                :class="msg.role === 'user' ? 'chat-user' : 'chat-assistant'"
+              >
+                <span class="chat-role-label">{{ msg.role === 'user' ? 'You' : 'AI' }}</span>
+                <div class="chat-text">{{ msg.content }}</div>
+              </div>
+              <div v-if="chatLoading" class="chat-msg chat-assistant chat-typing">
+                <span class="chat-role-label">AI</span>
+                <div class="chat-text chat-dots"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+            <div class="chat-input-row">
+              <textarea
+                class="chat-input"
+                v-model="chatInput"
+                rows="2"
+                placeholder="Ask AI for a suggested message…"
+                @keydown.enter.exact.prevent="sendChat"
+              ></textarea>
+              <button class="btn-send" :disabled="chatLoading || !chatInput.trim()" @click="sendChat">Send</button>
             </div>
           </div>
         </div>
@@ -326,7 +348,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useIncidentsStore } from '@/store/incidents';
 import { useRedisStore } from '@/store/redis';
@@ -338,13 +360,19 @@ import LogAnalysisPanel from '@/components/LogAnalysisPanel.vue';
 import TrafficRedirectModal from '@/components/TrafficRedirectModal.vue';
 import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
 import type { LogAnalysis } from '@/api/restart';
+import api from '@/api/axios';
 
 const route = useRoute();
 const store = useIncidentsStore();
 const redisStore = useRedisStore();
 const { show: toastShow } = useToast();
 
-const draftMessage = ref('');
+// AI Chat
+interface ChatMessage { role: 'user' | 'assistant'; content: string; }
+const chatMessages = ref<ChatMessage[]>([]);
+const chatInput = ref('');
+const chatLoading = ref(false);
+const chatMessagesRef = ref<HTMLElement | null>(null);
 const approvalTimeout = ref(parseInt(import.meta.env.VITE_APPROVAL_TIMEOUT || '10', 10));
 const logAnalyses = ref<LogAnalysis[]>([]);
 const activeRightTab = ref<'timeline' | 'logs'>('timeline');
@@ -537,6 +565,7 @@ async function runApprovalRestart(service: 'uh' | 'ci', incidentId: string): Pro
 
     const analysis = analyzeLog(logs, serviceName);
     onLogAnalyzed(serviceName, analysis);
+    activeRightTab.value = 'logs';
 
     const errCount = analysis.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'ERROR').length;
     if (errCount > 0) {
@@ -548,6 +577,12 @@ async function runApprovalRestart(service: 'uh' | 'ci', incidentId: string): Pro
 
     if (result.success) {
       toastShow('success', `${label} restarted successfully`, result.message || result.deploymentName);
+      // After UH restart succeeds, automatically restart CI after 90s countdown
+      if (isUH) {
+        toastShow('info', 'CI restart scheduled', 'CueMana-In will restart automatically in 90 seconds…');
+        await new Promise<void>(resolve => setTimeout(resolve, 90_000));
+        await runApprovalRestart('ci', incidentId);
+      }
     } else {
       toastShow('error', `${label} restart failed`, result.message);
     }
@@ -563,31 +598,55 @@ async function handleReject(incidentId: string): Promise<void> {
 
 async function refresh(): Promise<void> {
   await store.fetchIncidentById(route.params.id as string);
-  if (store.selectedIncident) {
-    if (store.selectedIncident.errorCode === 'SOURCE_DOWN') {
-      draftMessage.value = `Hi, The source is down for the channel ${store.selectedIncident.channelName}, can you please check?`;
-    } else {
-      draftMessage.value = `Hi, we are currently investigating an issue with ${store.selectedIncident.channelName}. Our automated system has detected ${store.selectedIncident.errorCode || 'a stream issue'} and is taking corrective action. We will update you shortly.`;
-    }
+}
+
+async function sendChat(): Promise<void> {
+  const text = chatInput.value.trim();
+  if (!text || chatLoading.value) return;
+  chatInput.value = '';
+  chatMessages.value.push({ role: 'user', content: text });
+  chatLoading.value = true;
+  try {
+    const res = await api.post(`/incidents/${route.params.id}/chat`, {
+      messages: chatMessages.value,
+    });
+    chatMessages.value.push({ role: 'assistant', content: res.data.reply });
+    await nextTick();
+    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+  } catch (err) {
+    toastShow('error', 'Chat failed', (err as Error).message);
+    chatMessages.value.pop();
+  } finally {
+    chatLoading.value = false;
   }
 }
 
-function sendDraftEmail(): void {
-  alert(`Email draft sent:\n\n${draftMessage.value}`);
-}
-
-function sendDraftWhatsApp(): void {
-  alert(`WhatsApp draft sent:\n\n${draftMessage.value}`);
+async function initChat(): Promise<void> {
+  if (chatMessages.value.length > 0) return;
+  chatLoading.value = true;
+  try {
+    const res = await api.post(`/incidents/${route.params.id}/chat`, {
+      messages: [{ role: 'user', content: 'Suggest the appropriate message to send to the customer right now based on the current incident status.' }],
+    });
+    chatMessages.value = [{ role: 'assistant', content: res.data.reply }];
+    await nextTick();
+    if (chatMessagesRef.value) chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+  } catch {
+    // silently skip — chat is optional
+  } finally {
+    chatLoading.value = false;
+  }
 }
 
 function formatTime(ts: string): string {
   return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-onMounted(() => {
-  refresh();
+onMounted(async () => {
+  await refresh();
   redisStore.fetchRedis();
   document.addEventListener('click', onClickOutside);
+  initChat();
 });
 
 onUnmounted(() => {
@@ -780,19 +839,54 @@ onUnmounted(() => {
 .player-no-url { height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bd); border-radius: 6px; color: var(--tx-3); font-size: 11px; }
 .player-url-small { font-family: monospace; font-size: 9px; color: var(--tx-4); word-break: break-all; }
 
-/* ── Draft message ───────────────────────────────── */
-.draft-textarea {
-  width: 100%; background: var(--bg-deep); border: 1px solid var(--bd); border-radius: 6px;
-  color: var(--tx-1); padding: 8px; font-size: 12px; font-family: inherit;
-  resize: vertical; outline: none; line-height: 1.55;
+/* ── AI Chat ─────────────────────────────────────── */
+.chat-card { display: flex; flex-direction: column; height: 100%; min-height: 280px; }
+.chat-messages {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 0; min-height: 180px; max-height: 340px;
 }
-.draft-textarea:focus { border-color: var(--accent); }
-.draft-actions { display: flex; gap: 8px; margin-top: 8px; }
-.btn-secondary {
-  flex: 1; background: var(--bd-sub); border: 1px solid var(--bd); color: var(--tx-2);
-  padding: 6px; border-radius: 6px; cursor: pointer; font-size: 11px; transition: all .15s;
+.chat-empty {
+  color: var(--tx-4); font-size: 11px; text-align: center; padding: 24px 16px;
+  line-height: 1.5; border: 1px dashed var(--bd-sub); border-radius: 6px;
 }
-.btn-secondary:hover { background: var(--bd); color: var(--tx-1); }
+.chat-msg {
+  display: flex; flex-direction: column; gap: 3px; max-width: 92%;
+}
+.chat-user  { align-self: flex-end; }
+.chat-assistant { align-self: flex-start; }
+.chat-role-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--tx-4);
+}
+.chat-user .chat-role-label  { text-align: right; }
+.chat-text {
+  background: var(--bg-deep); border: 1px solid var(--bd-sub);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.55;
+  color: var(--tx-1); white-space: pre-wrap; word-break: break-word;
+}
+.chat-user .chat-text { background: var(--accent-muted, rgba(88,166,255,.08)); border-color: var(--accent); }
+.chat-typing .chat-text { display: flex; align-items: center; gap: 4px; }
+.chat-dots span {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--tx-3);
+  animation: dot-bounce 1s infinite;
+}
+.chat-dots span:nth-child(2) { animation-delay: .15s; }
+.chat-dots span:nth-child(3) { animation-delay: .30s; }
+@keyframes dot-bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+
+.chat-input-row { display: flex; gap: 6px; margin-top: 8px; align-items: flex-end; }
+.chat-input {
+  flex: 1; background: var(--bg-deep); border: 1px solid var(--bd); border-radius: 6px;
+  color: var(--tx-1); padding: 7px 10px; font-size: 12px; font-family: inherit;
+  resize: none; outline: none; line-height: 1.5;
+}
+.chat-input:focus { border-color: var(--accent); }
+.btn-send {
+  background: var(--accent); border: none; color: #fff;
+  padding: 0 14px; height: 34px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; white-space: nowrap; transition: opacity .15s;
+}
+.btn-send:disabled { opacity: .45; cursor: not-allowed; }
+.btn-send:not(:disabled):hover { opacity: .85; }
 
 /* ── Audit table ─────────────────────────────────── */
 .audit-wrap { overflow-x: auto; overflow-y: auto; max-height: 220px; }

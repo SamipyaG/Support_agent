@@ -37,20 +37,13 @@
           <span class="dim"> · {{ uhResult.deploymentName }}</span>
         </div>
 
-        <!-- Countdown bar after UH restart -->
-        <div v-if="uhResult?.success && countdown > 0" class="countdown-block">
-          <span class="countdown-label">CI restart available in {{ countdown }}s</span>
-          <div class="countdown-bar-bg">
-            <div class="countdown-bar" :style="{ width: `${(countdown / 60) * 100}%` }"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Divider -->
       <div class="service-divider"></div>
 
       <!-- ── Cuemana In ─────────────────────────── -->
-      <div class="service-block" :class="{ locked: !ciEnabled }">
+      <div class="service-block">
         <div class="service-header">
           <span class="service-name">Cuemana In (CI)</span>
           <span class="service-pod dim mono">cuemana-in-{{ dsUuid }}</span>
@@ -59,12 +52,10 @@
         <button
           class="btn-restart"
           :class="{ done: !!ciResult, error: ciState === 'error' }"
-          :disabled="!ciEnabled || ciState !== 'idle' || !!ciResult"
+          :disabled="ciState !== 'idle' || !!ciResult"
           @click="doRestartCI"
         >
-          <span v-if="!uhResult" class="lock-hint">🔒 After UH restart</span>
-          <span v-else-if="countdown > 0" class="lock-hint">⏳ Wait {{ countdown }}s</span>
-          <span v-else-if="ciState === 'fetching-logs'">⬇ Downloading logs...</span>
+          <span v-if="ciState === 'fetching-logs'">⬇ Downloading logs...</span>
           <span v-else-if="ciState === 'restarting'">⟳ Restarting...</span>
           <span v-else-if="ciResult">✓ Restarted</span>
           <span v-else-if="ciState === 'error'">✗ Failed — retry?</span>
@@ -85,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import { fetchUHLogs, fetchCILogs, restartUH, restartCI, downloadTextFile, analyzeLog } from '@/api/restart';
 import type { RestartResult, LogAnalysis } from '@/api/restart';
 import { useToast } from '@/composables/useToast';
@@ -114,10 +105,6 @@ const ciResult = ref<RestartResult | null>(null);
 const ciError = ref('');
 const ciAnalysis = ref<LogAnalysis | null>(null);
 
-const countdown = ref(0);
-let countdownTimer: ReturnType<typeof setInterval> | null = null;
-
-const ciEnabled = computed(() => uhResult.value?.success === true && countdown.value === 0);
 
 function buildSummary(analysis: LogAnalysis | null): string {
   if (!analysis) return '';
@@ -147,17 +134,6 @@ const uhAnalysisClass   = computed(() => buildSummaryClass(uhAnalysis.value));
 const ciAnalysisSummary = computed(() => buildSummary(ciAnalysis.value));
 const ciAnalysisClass   = computed(() => buildSummaryClass(ciAnalysis.value));
 
-function startCountdown(): void {
-  countdown.value = 90;
-  countdownTimer = setInterval(() => {
-    countdown.value--;
-    if (countdown.value <= 0) {
-      clearInterval(countdownTimer!);
-      countdownTimer = null;
-    }
-  }, 1000);
-}
-
 async function doRestartUH(): Promise<void> {
   uhError.value = '';
   uhAnalysis.value = null;
@@ -180,7 +156,6 @@ async function doRestartUH(): Promise<void> {
 
     if (uhResult.value.success) {
       toastShow('success', 'UserHandler restarted successfully', uhResult.value.message || uhResult.value.deploymentName);
-      startCountdown();
     } else {
       toastShow('error', 'UserHandler restart failed', uhResult.value.message);
     }
@@ -223,7 +198,7 @@ async function doRestartCI(): Promise<void> {
   }
 }
 
-onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer); });
+onUnmounted(() => {});
 
 // Expose so the approval flow in IncidentDetailView can trigger the exact same path
 defineExpose({ triggerUH: doRestartUH, triggerCI: doRestartCI });

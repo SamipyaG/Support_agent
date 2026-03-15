@@ -2,14 +2,22 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Launch Full Stack",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
       "name": "Launch Backend (ts-node)",
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "node",
       "runtimeArgs": [
-        "--require", "ts-node/register",
-        "--transpile-only",
-        "--env-file=.env"
+        "--require", "ts-node/register"
       ],
       "args": ["src/index.ts"],
       "cwd": "${workspaceFolder}/backend",
@@ -17,6 +25,9 @@
       "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
       "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
       "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
       "console": "integratedTerminal",
       "restart": false
     },
