@@ -52,6 +52,8 @@ import AlarmNotificationBell from '@/components/AlarmNotificationBell.vue';
 import ClusterPanel from '@/components/ClusterPanel.vue';
 import OpenSearchPanel from '@/components/OpenSearchPanel.vue';
 
+const router = useRouter();
+const route  = useRoute();
 const store = useIncidentsStore();
 const waitingApprovals = computed(
   () => store.deduplicatedIncidents.filter((i) => i.state === 'WAITING_APPROVAL').length,
