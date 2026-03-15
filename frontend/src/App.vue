@@ -5,6 +5,7 @@
       <router-view />
     </div>
     <AlarmNotificationToast />
+    <ToastContainer />
   </div>
 </template>
 
@@ -14,6 +15,7 @@ import { useIncidentsStore } from '@/store/incidents';
 import { useVipChannelsStore } from '@/store/vipChannels';
 import AppHeader from '@/components/AppHeader.vue';
 import AlarmNotificationToast from '@/components/AlarmNotificationToast.vue';
+import ToastContainer from '@/components/ToastContainer.vue';
 
 const store = useIncidentsStore();
 const vipStore = useVipChannelsStore();

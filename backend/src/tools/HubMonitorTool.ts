@@ -420,6 +420,74 @@ export class HubMonitorTool {
     }, `restartCI(${cluster}/${dsUuid})`);
   }
 
+  // ═══════════════════════════════════════
+  // API 8 — REDIRECT TRAFFIC TO SOURCE
+  // PUT G11_BASE_URL/api_v1/channel/editChannel
+  // Moves a percentage of traffic away from G-Mana to the source stream
+  // ═══════════════════════════════════════
+
+  async redirectTrafficToSource(
+    dsUuid: string,
+    channelName: string,
+    sourceUrl: string,
+    redirectPercentage: number,
+  ): Promise<{ success: boolean; message: string }> {
+    return withRetry(async () => {
+      logger.info(`[G11] Redirecting ${redirectPercentage}% traffic to source for ${dsUuid}`);
+      const path = process.env.G11_EDIT_CHANNEL_PATH || '/api_v1/channel/editChannel';
+      await this.g11Client.put(path, {
+        uuid: dsUuid,
+        enable: true,
+        name: channelName,
+        url: sourceUrl,
+        REDIRECT_PRECENTAGE_THRESHOLD: String(redirectPercentage),
+        REDIRECT_PRECENTAGE_URL: sourceUrl,
+        redirectTo: 'source',
+        redirectTraffic: true,
+      });
+      logger.info(`[G11] Traffic redirected to source (${redirectPercentage}%) for ${dsUuid}`);
+      return { success: true, message: `Traffic redirected to source (${redirectPercentage}%)` };
+    }, `redirectTrafficToSource(${dsUuid})`);
+  }
+
+  // ═══════════════════════════════════════
+  // API 9 — REVERT TRAFFIC TO G-MANA
+  // PUT G11_BASE_URL/api_v1/channel/editChannel
+  // Re-enables G-Mana stream once it has recovered
+  // ═══════════════════════════════════════
+
+  async revertTrafficToGMana(
+    dsUuid: string,
+    channelName: string,
+    sourceUrl: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return withRetry(async () => {
+      logger.info(`[G11] Reverting traffic back to G-Mana for ${dsUuid}`);
+      const path = process.env.G11_EDIT_CHANNEL_PATH || '/api_v1/channel/editChannel';
+      await this.g11Client.put(path, {
+        uuid: dsUuid,
+        enable: true,
+        name: channelName,
+        url: sourceUrl,
+        redirectTraffic: false,
+        redirectTo: 'source',
+      });
+      logger.info(`[G11] Traffic reverted to G-Mana for ${dsUuid}`);
+      return { success: true, message: 'G-Mana stream recovered — traffic restored' };
+    }, `revertTrafficToGMana(${dsUuid})`);
+  }
+
+  // ═══════════════════════════════════════
+  // HEALTH CHECK — Is the G-Mana alarm still active?
+  // Proxies through getActiveAlarms() — if no active alarm for
+  // this dsUuid, G-Mana has recovered.
+  // ═══════════════════════════════════════
+
+  async isGManaAlarmActive(dsUuid: string): Promise<boolean> {
+    const alarms = await this.getActiveAlarms();
+    return alarms.some((a) => a.dsUuid === dsUuid && a.status === 'ON');
+  }
+
   // ─── Private mappers ─────────────────────────────────────────────────────────
 
   private mapAlarm(raw: RawAlarm): AlarmData {

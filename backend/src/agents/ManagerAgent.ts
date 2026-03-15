@@ -711,8 +711,8 @@ export class ManagerAgent {
     const clusterName = latest.clusterId || '';
 
     if (latest.restartAttempts >= latest.maxRestartAttempts) {
-      logger.warn(`[Manager] Max restart attempts reached for ${channelName} — escalating`);
-      await this.escalate(latest, alarm);
+      logger.warn(`[Manager] Max restart attempts reached for ${channelName} — proposing MOVE_TO_SOURCE`);
+      await this.proposeTrafficRedirect(latest, alarm);
       return;
     }
 
@@ -883,6 +883,63 @@ export class ManagerAgent {
     const latest = store.getIncident(incident._id)!;
     store.updateIncident(incident._id, { state: 'EXECUTING_ACTION' });
     await this.executeAction(latest, alarm, streamUrls);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MOVE_TO_SOURCE — final recovery step after all restarts fail
+  // Asks for human approval, then frontend executes the redirect
+  // with a user-supplied redirect percentage.
+  // ═══════════════════════════════════════════════════════════
+
+  private async proposeTrafficRedirect(incident: Incident, alarm: AlarmData): Promise<void> {
+    logger.warn(
+      `[Manager] All restarts failed for ${alarm.channelName} — proposing MOVE_TO_SOURCE`,
+    );
+
+    const approvalTimeoutSeconds = parseInt(process.env.APPROVAL_TIMEOUT_SECONDS || '300', 10);
+
+    store.updateIncident(incident._id, {
+      state: 'WAITING_APPROVAL',
+      recommendedAction: 'MOVE_TO_SOURCE',
+      explanation:
+        'G-Mana stream not recovering after restart attempts. ' +
+        'Proposing to move traffic to source stream.',
+      statusLabel: 'Awaiting approval — Move Traffic to Source',
+    });
+
+    store.pushTimelineEvent(incident._id, {
+      step: 'Approval', trigger: 'System', action: 'Move to Source Proposed',
+      details: `All restart attempts exhausted — proposing traffic redirect to source (timeout: ${approvalTimeoutSeconds}s)`,
+    });
+
+    const approval = await this.approvalService.waitForApproval(
+      incident._id,
+      'MOVE_TO_SOURCE',
+      { dsUuid: alarm.dsUuid, channelName: alarm.channelName },
+      approvalTimeoutSeconds,
+    );
+
+    if (approval.decision === 'rejected') {
+      logger.info(`[Manager] MOVE_TO_SOURCE rejected by ${approval.decidedBy} — escalating`);
+      await this.escalate(incident, alarm);
+      return;
+    }
+
+    if (approval.decision === 'timeout') {
+      logger.warn(`[Manager] MOVE_TO_SOURCE approval timed out — escalating`);
+      await this.escalate(incident, alarm);
+      return;
+    }
+
+    // Approved — record the decision; frontend handles the actual redirect
+    // (because it needs the redirect percentage from the operator).
+    logger.info(`[Manager] MOVE_TO_SOURCE approved by ${approval.decidedBy}`);
+    store.pushTimelineEvent(incident._id, {
+      step: 'Recovery', trigger: 'Manual', action: 'Move to Source Approved',
+      details: `Traffic redirect approved by ${approval.decidedBy} — operator will execute redirect`,
+    });
+    // State will be updated to MONITORING by the /traffic/redirect route
+    // when the frontend posts with the percentage.
   }
 
   private async escalate(incident: Incident, alarm: AlarmData): Promise<void> {
